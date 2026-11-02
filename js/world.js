@@ -170,11 +170,13 @@ function drawObAction(ctx, camX, camY) {
 function drawClearFx(ctx) {
   if (typeof CLEAR_FX === 'undefined') return;
   World.fx = World.fx || [];
-  while (CLEAR_FX.length) World.fx.push({ ...CLEAR_FX.shift(), t0: World.frameT });
+  // v0.91: 실제 시계로 센다. 게임 시간(frameT)은 안내 대화·창이 열리면 멈춰서, 뽑은 뒤 바로 대화가 뜨면 글자가 그대로 남아 있었다
+  const now = performance.now() / 1000;
+  while (CLEAR_FX.length) World.fx.push({ ...CLEAR_FX.shift(), t0: now });
   const k = Math.max(1, 2 / World.scale);
-  World.fx = World.fx.filter(f => World.frameT - f.t0 < 1.8);
+  World.fx = World.fx.filter(f => now - f.t0 < 1.8);
   for (const f of World.fx) {
-    const a = (World.frameT - f.t0) / 1.8, [ax, ay] = iso(f.x, f.y);
+    const a = (now - f.t0) / 1.8, [ax, ay] = iso(f.x, f.y);
     ctx.globalAlpha = a < 0.7 ? 1 : 1 - (a - 0.7) / 0.3;
     ctx.font = `bold ${Math.round(8 * k)}px sans-serif`;
     ctx.textAlign = 'center';
