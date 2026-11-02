@@ -497,6 +497,7 @@ function openBulletin() {
   modal({
     title: '📰 주보',
     html: `<p class="small">${isAway() ? `${awayDef().icon} 지금 신부님은 <b>${awayDef().name}</b> 중이에요 (본당에 미사가 없어요)` : plan ? `📌 다음 주일미사 뒤 <b>${AWAY[plan.kind].name}</b>(${AWAY[plan.kind].days}일)를 떠난다고 공지했어요` : '피정과 휴가는 주보로 미리 알리고 다음 주일미사 뒤에 떠나요. 신부님이 없는 동안 본당에 미사가 없어요.'}</p>
+      ${bishopWeeks() !== null ? `<p class="small">🧑‍⚖️ <b>주교님 사목방문</b>: ${bishopWeeks() === 0 ? '이번 주일' : `앞으로 ${bishopWeeks() + 1}번째 주일`}에 오셔서 미사를 주례하세요. 교우들이 많이 나와 봉헌이 늘어요. 신부님이 직접 맞이하면 교구 신뢰가 더 올라요.</p>` : ''}
       <p class="muted">🎓 ${nextTrainingText()} · 상반기(4월)·하반기(10월) 교구 연수는 사흘 동안 저절로 다녀와요</p>`,
     options: [
       ...['retreat', 'vacation'].map(k => { const a = AWAY[k], b = awayPlanBlocker(k); return { tile: true, label: `${a.icon} ${a.name} 공지`, tileSub: `${a.days}일 · 올해 ${awayUsed(k)}/${a.perYear}`, sub: b || a.desc, disabled: !!b, onClick: () => { const m = planAway(k); if (m) { toast(m); save(); } } }; }),
@@ -871,7 +872,7 @@ function openRoomMenu(key, room) {
   const block = blockText('group', key, g.type, to);
   const st = meetingState(key, room), sl = MEETING_SLOTS[groupSlot(g)], vital = Math.floor(g.vital === undefined ? 60 : g.vital);
   const div = divisionChairFor(g.type);
-  const status = { chair: ['👔', div ? `${div.name}이 회의를 이끌어요` : '위원장이 회의를 이끌어요', 'chair'], done: ['✅', '오늘 회의에 참석했어요', 'done'], open: ['🔔', `지금 회의 중 · ${sl.name} ${sl.from}~${sl.to}시`, 'open'], wait: ['🕘', `회의는 ${sl.name} ${sl.from}~${sl.to}시`, 'wait'] }[st];
+  const status = { chair: ['👔', `${div ? div.name : '위원장'}이 회의를 이끌어요 · ${sl.name} ${sl.from}~${sl.to}시에 신부님을 초대해요`, 'chair'], invite: ['💌', `${div ? div.name : '위원장'}이 지금 회의에 신부님을 초대했어요 · ${sl.name} ${sl.from}~${sl.to}시`, 'open'], done: ['✅', '오늘 회의에 참석했어요', 'done'], open: ['🔔', `지금 회의 중 · ${sl.name} ${sl.from}~${sl.to}시`, 'open'], wait: ['🕘', `회의는 ${sl.name} ${sl.from}~${sl.to}시`, 'wait'] }[st];
   const perks = (UNIT_PERKS[g.type] || []).map(k => `<span class="perk-chip ${g.level >= k.lv ? 'on' : ''}" title="${k.text}">${g.level >= k.lv ? '✨' : '🔒'} Lv${k.lv} ${k.text}</span>`).join('');
   const meet = meetingOption(key, room);
   modal({
@@ -887,7 +888,7 @@ function openRoomMenu(key, room) {
       <p class="small rh-prod">📈 ${def.prod(effL(g.level))}</p>${g.type === 'district' ? smallComHtml() : ''}
       <div class="perk-row">${perks}</div>`,
     options: [
-      ...(st === 'chair' ? [] : [{ ...meet, tile: true, label: st === 'done' ? '✅ 참석함' : '🙌 회의 참석', tileSub: st === 'open' ? (Game.state.energy < 2 ? '행동력이 모자라요' : '⚡2 · 강복·훈화 · 활력 +30') : st === 'done' ? '내일 또 와요' : `${sl.name}에 열려요` }]),
+      { ...meet, tile: true, label: st === 'done' ? '✅ 참석함' : st === 'invite' || st === 'chair' ? '💌 초대받은 회의' : '🙌 회의 참석', tileSub: st === 'open' ? (Game.state.energy < 2 ? '행동력이 모자라요' : '⚡2 · 강복·훈화 · 활력 +30') : st === 'invite' ? (Game.state.energy < 2 ? '행동력이 모자라요' : `⚡2 · 활력 +${MEET_INVITE_VITAL} · 안 가도 그대로`) : st === 'done' ? '내일 또 와요' : st === 'chair' ? `${sl.name}에 초대해요` : `${sl.name}에 열려요` },
       ...((p.plans || []).some(x => x.key === key && x.room === room) ? [{ tile: true, label: '💸 행사 지원 요청', tileSub: EVENT_PLANS[g.type].name, onClick: () => setTimeout(() => openPlanModal(p.plans.findIndex(x => x.key === key && x.room === room)), 0) }] : []),
       ...(g.type === 'catechumen' ? [{ tile: true, label: '📘 예비자 교리', tileSub: `예비신자 ${Math.floor(cateState().n)}명`, onClick: () => setTimeout(openCateMenu, 0) }] : []),
       ...(g.type === 'shop' ? [{ tile: true, label: `${SHOP_ITEMS[shopState().item].icon} 판매 물품·이윤`, tileSub: `${SHOP_ITEMS[shopState().item].name} · 이윤 ${Math.round(shopState().markup * 100)}%`, onClick: () => setTimeout(() => openShopMenu(effL(g.level) * vitalMult(g)), 0) }] : []),
@@ -932,7 +933,8 @@ function meetingText(key, room) {
   const g = Game.state.pastor.sites[key].rooms[room];
   const sl = MEETING_SLOTS[groupSlot(g)];
   return {
-    chair: '👔 위원장이 회의를 이끌어요',
+    chair: `👔 위원장이 회의를 이끌어요 (${sl.name}에 초대)`,
+    invite: `💌 위원장이 지금 회의에 초대했어요 (${sl.name} ${sl.from}~${sl.to}시)`,
     done: '✅ 오늘 회의 참석함',
     open: `🔔 지금 회의 중! (${sl.name} ${sl.from}~${sl.to}시)`,
     wait: `🕘 회의: ${sl.name} ${sl.from}~${sl.to}시`,
@@ -942,11 +944,11 @@ function meetingText(key, room) {
 function meetingOption(key, room) {
   const s = Game.state, g = s.pastor.sites[key].rooms[room], def = UNITS[g.type];
   const st = meetingState(key, room);
-  if (st === 'chair') return { label: '👔 위원장이 회의를 이끌어요', sub: '어려움과 건의사항은 상임위원회(사목회장)로 올라와요', disabled: true };
+  if (st === 'chair') return { label: '👔 위원장이 회의를 이끌어요', sub: `${meetingText(key, room)} · 어려움과 건의사항은 상임위원회(사목회장)로 올라와요`, disabled: true };
   return {
-    label: `🙌 회의 참석 <span class="cost">⚡2</span>`,
-    sub: st === 'open' ? '지금 회의 중이에요. 함께하면 활력과 효과가 올라요' : meetingText(key, room),
-    disabled: st !== 'open' || s.energy < 2,
+    label: `${st === 'invite' ? '💌 초대받은 회의 가기' : '🙌 회의 참석'} <span class="cost">⚡2</span>`,
+    sub: st === 'open' ? '지금 회의 중이에요. 함께하면 활력과 효과가 올라요' : st === 'invite' ? `위원장이 신부님을 초대했어요. 가면 활력 +${MEET_INVITE_VITAL}, 안 가도 그대로예요` : meetingText(key, room),
+    disabled: (st !== 'open' && st !== 'invite') || s.energy < 2,
     onClick: () => { const m = attendMeeting(key, room); if (m) toast(`${def.icon} ${m}`); },
   };
 }
@@ -2036,10 +2038,12 @@ function openCateMenu() {
         <div class="rh-vital"><span>교리 준비</span><div class="bar good"><span style="width:${c.quality}%"></span></div><b>${Math.round(c.quality)}</b></div>
         <div class="rh-status ${weeksToBaptism() === 1 ? 'open' : 'wait'}">🕊️ 세례식까지 주일 ${weeksToBaptism()}번 · 끝까지 마칠 비율 ${Math.round(cateCompletion() * 100)}% · 준비비 약 💰${baptismCost(Math.floor(c.n * cateCompletion()))}</div>
       </div></div>
-      <p class="small rh-prod">📈 예비신자가 시간당 약 ${cateInflow().toFixed(1)}명 찾아와요${promo ? ` (📣 ${promo.name} 홍보 중)` : ''}${c.n >= cap ? ' · <b>교리반 자리가 꽉 찼어요</b> (교리반 단체를 키우세요)' : ''}</p>
+      <p class="small rh-prod">📈 예비신자가 시간당 약 ${cateInflow().toFixed(1)}명 찾아와요${promo ? ` (📣 ${promo.name} 홍보 중)` : ''}${c.n >= cap ? ' · <b>교리반 자리가 꽉 찼어요</b> (아래에서 반을 더 열거나 교리반 단체를 키우세요)' : ''}</p>
+      <p class="small">🏫 지금 여는 반: 신부님 반${cateClasses().map(k => ` · ${k.icon} ${k.name}`).join('')}</p>
       <p class="muted">교리반 단체가 클수록 자리가 늘고, 선교분과와 홍보는 찾아오는 사람을, 교리 준비와 수녀님은 끝까지 마치는 사람을 늘려요.</p>`,
     options: [
       { tile: true, label: `📖 교리 준비 <span class="cost">⚡${cost}</span>`, tileSub: `준비 +${CATE.prepGain}`, disabled: Game.state.energy < cost, onClick: () => { const m = runAction(prep); if (m) toast(`📖 ${m}`); } },
+      ...(nextCateClass() ? [(() => { const k = nextCateClass(), b = cateClassBlocker(); return { tile: true, label: `🏫 ${k.name} 열기${c.n >= cap ? ' ⭐' : ''}`, tileSub: b ? `🔒 ${b}` : `💰${scaledCost(k.cost)} · 자리 +${k.cap} · 주일마다 💰${scaledCost(k.week)}`, sub: b || k.who, disabled: !!b, onClick: () => { const m = openCateClass(); if (m) { toast(m); save(); setTimeout(openCateMenu, 0); } } }; })()] : []),
       ...PROMOS.map(pr => { const b = promoBlocker(pr); return { tile: true, label: `${pr.icon} ${pr.name}`, tileSub: b ? `🔒 ${b}` : `💰${scaledCost(pr.cost)} · ${pr.days}일 ×${pr.mult}`, sub: b, disabled: !!b, onClick: () => { const m = startPromo(pr.id); if (m) toast(`📣 ${m}`); } }; }),
     ],
   });
@@ -2228,6 +2232,8 @@ function questTasks() {
   if (p.event) out.push({ icon: '❗', text: p.event === 'sisterOver' ? '수녀님 월권' : p.event === 'dioCall' ? '교구 공문' : p.event === 'quitTalk' ? '봉사자 면담' : p.event === 'budgetGrumble' ? '지원 불만' : p.event === 'sisterFaction' ? '수녀님 세력' : p.event === 'massReq' ? '미사 늘려 달래요' : p.event === 'cleanReq' ? '청소 요청' : p.event === 'decorReq' ? '교우들의 부탁' : '찾아온 교우', attr: go('npc:eventNpc'), hl: true, pri: 9 });
   const open = pastorMeetings().filter(x => meetingState(x.key, x.room) === 'open');
   if (open.length) out.push({ icon: '🔔', text: `회의 ${open.length}곳 지금`, attr: go(`room:${open[0].key}:${open[0].room}`), hl: true, pri: 8 });
+  const inv = meetingInvites();
+  if (inv.length) out.push({ icon: '💌', text: `회의 초대 ${inv.length}곳`, attr: go(`room:${inv[0].key}:${inv[0].room}`), hl: false, pri: 5 });
   if (sundayReady()) out.push({ icon: '⛪', text: p.week > 0 && Date.now() - p.lastSunday > 3 * sundayIntervalMs() ? '주일미사 · 오래 쉬면 신자가 떠나요' : '주일미사', attr: go('b:church'), hl: true, pri: 7 });
   const cold = allGroups().filter(x => x.g.level && (x.g.vital === undefined ? 60 : x.g.vital) < 25);
   if (cold.length) out.push({ icon: '🥶', text: `식어 가는 단체 ${cold.length}곳`, attr: go(`room:${cold[0].key}:${cold[0].room}`), hl: true, pri: 6 });

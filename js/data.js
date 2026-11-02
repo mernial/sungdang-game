@@ -790,6 +790,15 @@ const PART_NAME = { edu: '교육·연수비', bus: '버스 대여비', food: '�
 
 // 예비자 교리: 문의한 사람(예비신자)이 교리반에 모이고, 네 주일마다 세례식에서 입교한다
 const CATE = { baseCap: 5, capPerLevel: 10, baptismEvery: 4, prepGain: 12, ceremony: 10, perPerson: 2 };
+// 주교님 사목방문 (v0.91): 가끔 교구에서 미리 알려 오고, 그 주일에 주교님이 미사를 주례하신다. 교우들이 많이 나와 봉헌이 는다
+// minWeek: 부임 몇 주 뒤부터, gap: 다녀가신 뒤 최소 몇 주, chance: 주일마다 소식이 올 확률, notice: 몇 주 전에 알리나
+const BISHOP_VISIT = { minWeek: 6, gap: 16, chance: 0.18, notice: 2, attend: 0.2, collect: 1.4, heart: 4, rep: 2, trust: 3, trustIn: 3, trustOut: -3 };
+// 교리반을 더 연다 (v0.91): 자리가 꽉 차면 반을 늘린다. cost는 여는 비용, week는 주일마다 교재·간식비 (본당 규모에 맞춰 커짐)
+const CATE_CLASSES = [
+  { name: '평일 오전반', icon: '☀️', cap: 10, cost: 25, week: 2, who: '낮에 시간이 되는 어르신·주부들' },
+  { name: '직장인 저녁반', icon: '🌙', cap: 15, cost: 50, week: 3, who: '퇴근 뒤 오는 직장인들' },
+  { name: '주말 집중반', icon: '📅', cap: 20, cost: 90, week: 4, who: '주말에만 시간이 되는 사람들', church: 4 },
+];
 // 교리 홍보: 일정 기간 예비신자가 찾아오는 속도를 키운다 (cost는 본당 규모에 맞춰 커짐)
 const PROMOS = [
   { id: 'flyer', icon: '📄', name: '전단지', cost: 15, mult: 1.3, days: 2 },

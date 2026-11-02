@@ -325,6 +325,9 @@ function helpCost() { return hasChair('youngDiv') ? 1 : 2; }
 function groupId(key, room) { return `${key}:${room}`; }
 
 // 신부가 직접 회의에 들어가야 하는 단체들 (위원장 이전)
+const MEET_INVITE_VITAL = 20; // 위원장 회의 초대에 응하면 (안 가도 줄지 않는다)
+// 지금 신부님을 초대한 위원장 단체
+function meetingInvites() { return allGroups().filter(x => x.g.level >= 1 && chairLed(x.g) && meetingState(x.key, x.room) === 'invite'); }
 function pastorMeetings() { return allGroups().filter(x => x.g.level >= 1 && !chairLed(x.g)); }
 
 // 회의 시간: 단체를 만들 때 신부가 정한다 (나중에 바꿀 수 있음). 정하지 않았으면 단체의 기본 시간
@@ -346,8 +349,9 @@ function setGroupSlot(key, room, slot) {
 function meetingState(key, room) {
   const g = Game.state.pastor.sites[key].rooms[room];
   if (!g || g.level < 1) return 'none';
-  if (chairLed(g)) return 'chair';
+  // 위원장이 이끄는 단체도 회의 시간에 신부님을 초대한다 (v0.91): 가면 활력이 오르고, 안 가도 그대로
   if (Game.state.pastor.daily.attended[groupId(key, room)]) return 'done';
+  if (chairLed(g)) return slotOpen(g) ? 'invite' : 'chair';
   return slotOpen(g) ? 'open' : 'wait';
 }
 
@@ -1306,7 +1310,28 @@ function finishClear(id) {
 // ---------- 예비자 교리: 문의 → 교리반 → 세례식(입교) ----------
 function cateState() { const p = Game.state.pastor; return p.cate || (p.cate = { n: 0, quality: 20, week: 0 }); }
 // 교리반 자리: 교리반 단체가 클수록 많이 받는다 (교리반이 없으면 신부님이 몇 명만)
-function cateCapacity() { return CATE.baseCap + Math.round(CATE.capPerLevel * unitLevels('catechumen')); }
+// 주교님 사목방문까지 남은 주일 수 (없으면 null). 0이면 이번 주일
+function bishopWeeks() { const p = Game.state.pastor; return p && p.bishop ? Math.max(0, p.bishop.week - p.week) : null; }
+function cateCapacity() { return CATE.baseCap + Math.round(CATE.capPerLevel * unitLevels('catechumen')) + cateClasses().reduce((a, k) => a + k.cap, 0); }
+// 더 연 교리반 (CATE_CLASSES 앞에서부터)
+function cateClasses() { return CATE_CLASSES.slice(0, cateState().classes || 0); }
+function nextCateClass() { return CATE_CLASSES[cateState().classes || 0] || null; }
+function cateClassBlocker() {
+  const k = nextCateClass(), p = Game.state.pastor;
+  if (!k) return '교리반을 모두 열었어요';
+  if (k.church && p.fixed.church < k.church) return `성당 Lv${k.church}부터 열 수 있어요`;
+  if (p.res.offering < scaledCost(k.cost)) return `봉헌금 ${scaledCost(k.cost)}만 원이 필요해요`;
+  return '';
+}
+function openCateClass() {
+  const k = nextCateClass(), c = cateState(), p = Game.state.pastor;
+  if (cateClassBlocker()) return null;
+  const cost = scaledCost(k.cost);
+  p.res.offering -= cost; book('catechumen', 'edu', cost);
+  c.classes = (c.classes || 0) + 1;
+  addLog(`📘 예비자 교리 ${k.name}을 새로 열었습니다.`);
+  return `${k.icon} ${k.name}을 열었어요 · 교리반 자리 +${k.cap} (지금 ${cateCapacity()}자리)`;
+}
 function promoMult() {
   const p = Game.state.pastor;
   if (!p.promo || gameTime() > p.promo.until) return 1;
@@ -1348,6 +1373,9 @@ function startPromo(id) {
 function cateSunday() {
   const c = cateState(), lines = [];
   c.week++;
+  // 더 연 교리반의 교재·간식비
+  const extra = cateClasses().reduce((a, k) => a + scaledCost(k.week), 0);
+  if (extra) { const p = Game.state.pastor, paid = Math.min(extra, Math.max(0, Math.floor(p.res.offering))); p.res.offering -= paid; book('catechumen', 'edu', paid); lines.push(`📘 교리반 ${cateClasses().length + 1}개 교재·간식비 💰${paid}`); }
   if (c.week % CATE.baptismEvery !== 0) return lines;
   const rate = cateCompletion();
   let baptized = Math.floor(c.n * rate * (hasPerk('mission6') ? 1.2 : 1));
@@ -1901,14 +1929,15 @@ function attendMeeting(key, room) {
     addLog(`✝️ 공소 방문: ${msg}`);
     return msg;
   }
-  if (meetingState(key, room) !== 'open') return null;
-  const g = site.rooms[room], def = UNITS[g.type];
+  const ms = meetingState(key, room);
+  if (ms !== 'open' && ms !== 'invite') return null;
+  const g = site.rooms[room], def = UNITS[g.type], invited = ms === 'invite';
   spendEnergy(2);
   p.daily.attended[groupId(key, room)] = true;
   // 주임 신부가 직접 오면 강복과 훈화: 수녀님이 대신 들어갈 때(활력만)보다 혜택이 크다
-  g.vital = Math.min(100, (g.vital === undefined ? 60 : g.vital) + 30 + (sisterIn(g.type) ? 5 : 0));
+  g.vital = Math.min(100, (g.vital === undefined ? 60 : g.vital) + (invited ? MEET_INVITE_VITAL : 30) + (sisterIn(g.type) ? 5 : 0));
   const bh = addRes('heart', 1), br = gain('rapport', 0.5);
-  let msg = `🙏 강복을 주고 훈화를 했어요 · ${def.meet(effL(g.level))}, 마음 ${fmt(bh)}, 친화력 ${fmt(br)}, 활력 ${Math.floor(g.vital)}${sisterIn(g.type) ? ' (수녀님과 함께해 +5)' : ''}`;
+  let msg = `${invited ? '💌 위원장의 초대로 회의에 들어가 ' : '🙏 '}강복을 주고 훈화를 했어요 · ${def.meet(effL(g.level))}, 마음 ${fmt(bh)}, 친화력 ${fmt(br)}, 활력 ${Math.floor(g.vital)}${sisterIn(g.type) ? ' (수녀님과 함께해 +5)' : ''}`;
   if (Math.random() < LUCK.volunteerAtMeeting) msg += ` · 🍀 회의에서 새 봉사자가 손을 들었어요! 신자 ${fmt(addRes('members', 2))}, 마음 ${fmt(addRes('heart', 1))}`;
   if (!p.daily.allDone && pastorMeetings().every(x => p.daily.attended[groupId(x.key, x.room)])) {
     p.daily.allDone = true;
@@ -2662,10 +2691,20 @@ function doSunday(opts = {}) {
   const newcomers = addRes('members', Math.round(base + (hasPerk('catechumen3') ? 2 : 0) + (sisterIn('catechumen') ? 2 * sisterEffFor('catechumen') : 0)));
   if (r.grade === 'moved') addRes('reputation', 1);
   // 미사에 나온 사람만 봉헌한다 (참례율 × 신자 수), 한 사람 봉헌은 마음에 따라
-  const rate = attendanceRate(), attendees = Math.round(p.res.members * rate);
+  // 주교님 사목방문 주일: 평소 안 나오던 교우들까지 나와 참례·봉헌이 크게 는다
+  const bv = !!(p.bishop && p.week >= p.bishop.week), B = BISHOP_VISIT;
+  const rate = bv ? Math.min(0.98, attendanceRate() + B.attend) : attendanceRate(), attendees = Math.round(p.res.members * rate);
   p.lastAttendance = attendees;
   const mb = massBonus(), lit = liturgyNow();
-  const collectMult = auto ? SUNDAY_AUTO.collect : 1 + (prepared ? SUNDAY_PREP_BONUS : 0) + (r.grade === 'moved' ? 0.1 : 0);
+  const collectMult = (auto ? SUNDAY_AUTO.collect : 1 + (prepared ? SUNDAY_PREP_BONUS : 0) + (r.grade === 'moved' ? 0.1 : 0)) * (bv ? B.collect : 1);
+  const bishopLines = [];
+  if (bv) {
+    const dt = B.trust + (auto ? B.trustOut : B.trustIn);
+    p.trust = clamp((p.trust || 50) + dt, 0, 100);
+    bishopLines.push(`🧑‍⚖️ 주교님 사목방문! 주교님이 미사를 주례하시고 견진·강복을 주셨어요 · 참례율 +${Math.round(B.attend * 100)}% · 봉헌 ×${B.collect} · ❤️${fmt(addRes('heart', B.heart))} · 🌏${fmt(addRes('reputation', B.rep))} · 교구 신뢰 ${dt >= 0 ? '+' : ''}${dt}${auto ? ' (신부님이 자리에 없어 주교님이 서운해하셨어요)' : ' (신부님이 직접 맞이했어요)'}`);
+    addLog('🧑‍⚖️ 주교님이 사목방문으로 주일미사를 주례하셨습니다.');
+    p.bishopLast = p.week; p.bishop = null;
+  }
   const collection = addRes('offering', attendees * (0.075 + p.res.heart / 100 * 0.25) * (hasPerk('choir6') ? 1.2 : 1) * mb.collect * collectMult);
   // 중고등부·청년회가 있으면 토요 저녁 미사가 그들의 미사가 되고, 그들이 전례 봉사를 한다
   const youthMass = massCount() >= 2 && youthMassReady();
@@ -2687,6 +2726,12 @@ function doSunday(opts = {}) {
   if (sisters().some(s => (s.bond === undefined ? 60 : s.bond) >= 50)) p.convent = Math.min(100, conventRep() + 1);
   p.prep = 0;
   p.week++;
+  // 교구에서 사목방문 소식이 온다 (몇 주 앞서 주보에 알린다)
+  if (!p.bishop && p.week >= BISHOP_VISIT.minWeek && p.week - (p.bishopLast === undefined ? -99 : p.bishopLast) >= BISHOP_VISIT.gap && Math.random() < BISHOP_VISIT.chance) {
+    p.bishop = { week: p.week + BISHOP_VISIT.notice };
+    bishopLines.push(`📜 교구 소식: 앞으로 ${BISHOP_VISIT.notice + 1}번째 주일에 주교님이 사목방문으로 미사를 주례하러 오세요. 그날은 신부님이 직접 맞이하면 좋아요`);
+    addLog('📜 주교님 사목방문 일정이 잡혔습니다.');
+  }
   p.lastSunday = auto ? opts.at : Date.now();
   const awayMsg = awayAfterSunday(p.lastSunday);
   if (p.guide) p.guide.sunday = true;
@@ -2695,7 +2740,7 @@ function doSunday(opts = {}) {
   const pool = PASTOR_EVENTS.filter(e => !e.manual && (!e.cond || e.cond()));
   if (!PASTOR_EVENTS.some(e => e.manual && e.id === p.event)) p.event = Math.random() < 0.5 ? pick(pool).id : null;
   addLog(auto ? '⛪ 주일미사가 정해진 시간에 드려졌어요' : `⛪ 주일미사 강론: ${r.label}`);
-  return { auto, prepared, away: awayMsg, youthMass, weekLines, collectMult, sermon: r, attendees, rate, collection: Math.round(collection), newcomers: Math.round(newcomers), choir: unitLevels('choir') > 0, lit, altar: altarCare(), flower: flowerCare(), servers: unitLevels('server') > 0, organ: unitLevels('organ') > 0, lector: unitLevels('lector') > 0, shuttle: shuttleOn(), lines: [`📅 ${lit.name}${massCount() > 1 ? ` · 주일미사 ${massCount()}대` : ''}`, ...(prepared ? [`✍️ 강론을 준비하고 직접 집전해 봉헌이 ${Math.round((collectMult - 1) * 100)}% 더 모였어요`] : []), ...(youthMass ? ['🎸 토요일 저녁 7시 30분 중고등부·청년 미사: 학생과 청년들이 전례 봉사를 했어요'] : []), ...weekLines, ...(awayMsg ? [awayMsg] : []), ...mb.lines, ...altarLines, ...(shuttleOn() ? [`🚐 관리장님이 셔틀버스로 어르신들을 모셔 왔어요 · 참례율 +${Math.round(SHUTTLE.attend * 100)}% · 기름값 💰${shuttleCost()}`] : []), `⛪ 미사 참례 ${attendees}명 / 신자 ${Math.floor(p.res.members)}명 (${Math.round(rate * 100)}%)`, `❤️ 신자들의 마음 ${fmt(h)}`, ...(newcomers >= 1 ? [`👥 강론 소문을 듣고 새 신자 ${Math.round(newcomers)}명이 찾아왔어요`] : []), `💰 주일 봉헌 ${Math.round(collection)}만 원`, ...cateLines, ...levy] };
+  return { auto, prepared, away: awayMsg, youthMass, weekLines, collectMult, sermon: r, attendees, rate, collection: Math.round(collection), newcomers: Math.round(newcomers), choir: unitLevels('choir') > 0, lit, altar: altarCare(), flower: flowerCare(), servers: unitLevels('server') > 0, organ: unitLevels('organ') > 0, lector: unitLevels('lector') > 0, shuttle: shuttleOn(), bishop: bv, lines: [`📅 ${lit.name}${massCount() > 1 ? ` · 주일미사 ${massCount()}대` : ''}`, ...bishopLines, ...(prepared ? [`✍️ 강론을 준비하고 직접 집전해 봉헌이 ${Math.round((collectMult - 1) * 100)}% 더 모였어요`] : []), ...(youthMass ? ['🎸 토요일 저녁 7시 30분 중고등부·청년 미사: 학생과 청년들이 전례 봉사를 했어요'] : []), ...weekLines, ...(awayMsg ? [awayMsg] : []), ...mb.lines, ...altarLines, ...(shuttleOn() ? [`🚐 관리장님이 셔틀버스로 어르신들을 모셔 왔어요 · 참례율 +${Math.round(SHUTTLE.attend * 100)}% · 기름값 💰${shuttleCost()}`] : []), `⛪ 미사 참례 ${attendees}명 / 신자 ${Math.floor(p.res.members)}명 (${Math.round(rate * 100)}%)`, `❤️ 신자들의 마음 ${fmt(h)}`, ...(newcomers >= 1 ? [`👥 강론 소문을 듣고 새 신자 ${Math.round(newcomers)}명이 찾아왔어요`] : []), `💰 주일 봉헌 ${Math.round(collection)}만 원`, ...cateLines, ...levy] };
 }
 
 // 교구 공납금: 한 주 동안 거둔 봉헌(헌금함·단체·주일 봉헌)의 일정 비율. 건축헌금은 빠진다.
