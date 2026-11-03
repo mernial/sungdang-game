@@ -818,6 +818,14 @@ function drawFenceEdge(ctx, lv, e) {
   const line = (p, q, w, c) => { ctx.strokeStyle = c; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(p[0], p[1]); ctx.lineTo(q[0], q[1]); ctx.stroke(); };
   const post = (p, h, w, c, top) => { ctx.fillStyle = c; ctx.fillRect(p[0] - w / 2, p[1] - h, w, h); if (top) { ctx.fillStyle = top; ctx.fillRect(p[0] - w / 2 - 0.3, p[1] - h - 0.8, w + 0.6, 1); } };
   ctx.save();
+  // v1.07: 칠한 담장 그림 (tools/blender/make-fence.py: 한 변, 화면 폭 1단위, 그림 가운데 = 변 가운데 땅에서 0.22 위). y 방향 변은 좌우로 뒤집는다
+  const img = getSprite(`fence-lv${lv}`);
+  if (img) {
+    const K = TW / 2 / Math.SQRT1_2, S = 1.0 * K, mx = (A[0] + B[0]) / 2, my = (A[1] + B[1]) / 2 - 0.22 * Math.cos(Math.asin(TH / TW)) * K;
+    ctx.translate(mx, my); if (!alongX) ctx.scale(-1, 1);
+    ctx.imageSmoothingEnabled = true; ctx.drawImage(img, -S / 2, -S / 2, S, S);
+    ctx.restore(); return;
+  }
   if (lv === 1) {
     // 나무 말뚝 + 가로대 두 줄
     for (const h of [2.6, 5]) line(up(A, h), up(B, h), 0.9, shade('#8a5f38', '#6e4a2a'));

@@ -950,7 +950,7 @@ const VAULT = [0, 300, 600, 1000, 1500, 2200, 3000, 4000, 5500, 7500, 10000, 130
 // 건물에 쌓이는 양: 그 건물 생산의 몇 시간어치까지 (v1.05: Lv1 3시간 → Lv10 10시간. 자주 들러 거두도록, 대신 봉헌은 더 많이)
 function stashHours(L) { return 3 + 7 * (Math.min(L, 10) - 1) / 9; }
 // v1.05 사용자 요청: 자주 들러 할 일이 많아진 만큼 봉헌이 더 걷힌다 (모든 본당)
-const OFFERING_BOOST = 1.5;
+const OFFERING_BOOST = 2; // v1.07: 1.5 → 2
 
 // 교구 공납금: 한 주 동안 거둔 봉헌의 일정 비율을 주일마다 교구에 낸다. 큰 본당일수록 비율이 높다
 const LEVY_RATE = [0, 0.08, 0.08, 0.10, 0.10, 0.12, 0.13, 0.15, 0.16, 0.18, 0.20];
@@ -1788,44 +1788,44 @@ const _qn = {
 };
 const FIRST_QUESTS = [
   // 1장: 마당 정리 (5분 간격)
-  { id: 'clear3', icon: '🌿', name: '마당의 잡초와 돌 치우기', desc: '잡초·돌·나무를 눌러 치워요', need: () => [_qn.cleared(), 3], reward: { offering: 30 }, go: 'clear' },
-  { id: 'path5', icon: '🛤️', name: '성당 앞에 길 깔기', desc: '짓기 → 길로 땅을 눌러 길을 놓아요', need: () => [_qn.paths(), 5], reward: { offering: 20 }, go: 'path' },
-  { id: 'flower1', icon: '🌷', name: '화단 하나 가꾸기', desc: '짓기 → 조경 → 화단', need: () => [_qn.decor('flowerbed'), 1], reward: { offering: 25, heart: 1 }, go: 'decor' },
-  { id: 'room2', icon: '📦', name: '교리실 하나 더 놓기', desc: '짓기 → 교리실', need: () => [containerCount(), 2], reward: { offering: 40 }, go: 'build' },
-  { id: 'group2', icon: '🙌', name: '단체 둘 모으기', desc: '교리실 빈 방을 눌러 단체를 만들어요', need: () => [allGroups().length, 2], reward: { offering: 30, heart: 1 }, go: 'groups' },
-  { id: 'office2', icon: '🗂️', name: '사무실 손보기 (Lv2)', desc: '사무실을 눌러 고쳐요 · 금고가 커져요', need: () => [_qn.fixed('office'), 2], reward: { offering: 40 }, go: 'b:office' },
-  { id: 'fence1', icon: '🪵', name: '본당 땅에 울타리 두르기', desc: '짓기 → 울타리 · 본당 경계가 생겨요', need: () => [Game.state.pastor.fence || 0, 1], reward: { offering: 40, heart: 1 }, go: 'fence' },
-  { id: 'clear8', icon: '🪨', name: '묵은 땅 더 치우기', desc: '잡초·돌·나무를 8곳까지', need: () => [_qn.cleared(), 8], reward: { offering: 40 }, go: 'clear' },
-  { id: 'lot2', icon: '🏞️', name: '첫 땅 넓히기', desc: '짓기 → 땅 넓히기 (서쪽 텃밭이나 앞 공터)', need: () => [_qn.lots(), 2], reward: { offering: 50, gems: 3 }, go: 'lots' },
-  { id: 'church3', icon: '⛪', name: '성당 Lv3 증축', desc: '성당을 눌러 증축해요', need: () => [Game.state.pastor.fixed.church, 3], reward: { offering: 60, gems: 3 }, go: 'b:church' },
-  { id: 'rectory3', icon: '🏠', name: '사제관 Lv3', desc: '사제관을 눌러 고쳐요 · 행동력이 늘어요', need: () => [_qn.fixed('rectory'), 3], reward: { offering: 50 }, go: 'b:rectory' },
-  { id: 'statue', icon: '🙏', name: '마당에 성모상 모시기', desc: '짓기 → 조경 → 성모상', need: () => [_qn.decor('statue'), 1], reward: { offering: 40, heart: 2 }, go: 'decor' },
-  { id: 'lit1', icon: '🕯️', name: '평일미사 열기', desc: '성당을 눌러 평일 전례를 하나 열어요', need: () => [Object.keys(litState().open).length, 1], reward: { offering: 40, heart: 1 }, go: 'b:church' },
-  { id: 'grp2lv2', icon: '📈', name: '단체 키우기', desc: '단체 둘을 Lv2로', need: () => [_qn.groupsAt(2), 2], reward: { offering: 50 }, go: 'groups' },
-  { id: 'lot3', icon: '🏞️', name: '땅 한 곳 더 넓히기', desc: '짓기 → 땅 넓히기', need: () => [_qn.lots(), 3], reward: { offering: 70, gems: 3 }, go: 'lots' },
+  { id: 'clear3', icon: '🌿', name: '마당의 잡초와 돌 치우기', desc: '잡초·돌·나무를 눌러 치워요', need: () => [_qn.cleared(), 3], reward: { offering: 60 }, go: 'clear' },
+  { id: 'path5', icon: '🛤️', name: '성당 앞에 길 깔기', desc: '짓기 → 길로 땅을 눌러 길을 놓아요', need: () => [_qn.paths(), 5], reward: { offering: 40 }, go: 'path' },
+  { id: 'flower1', icon: '🌷', name: '화단 하나 가꾸기', desc: '짓기 → 조경 → 화단', need: () => [_qn.decor('flowerbed'), 1], reward: { offering: 50, heart: 1 }, go: 'decor' },
+  { id: 'room2', icon: '📦', name: '교리실 하나 더 놓기', desc: '짓기 → 교리실', need: () => [containerCount(), 2], reward: { offering: 80 }, go: 'build' },
+  { id: 'group2', icon: '🙌', name: '단체 둘 모으기', desc: '교리실 빈 방을 눌러 단체를 만들어요', need: () => [allGroups().length, 2], reward: { offering: 60, heart: 1 }, go: 'groups' },
+  { id: 'office2', icon: '🗂️', name: '사무실 손보기 (Lv2)', desc: '사무실을 눌러 고쳐요 · 금고가 커져요', need: () => [_qn.fixed('office'), 2], reward: { offering: 80 }, go: 'b:office' },
+  { id: 'fence1', icon: '🪵', name: '본당 땅에 펜스 세우기', desc: '짓기 → 담장 · 낡은 나무 펜스로 본당 경계가 생겨요', need: () => [Game.state.pastor.fence || 0, 1], reward: { offering: 80, heart: 1 }, go: 'fence' },
+  { id: 'clear8', icon: '🪨', name: '묵은 땅 더 치우기', desc: '잡초·돌·나무를 8곳까지', need: () => [_qn.cleared(), 8], reward: { offering: 80 }, go: 'clear' },
+  { id: 'lot2', icon: '🏞️', name: '첫 땅 넓히기', desc: '짓기 → 땅 넓히기 (서쪽 텃밭이나 앞 공터)', need: () => [_qn.lots(), 2], reward: { offering: 100, gems: 3 }, go: 'lots' },
+  { id: 'church3', icon: '⛪', name: '성당 Lv3 증축', desc: '성당을 눌러 증축해요', need: () => [Game.state.pastor.fixed.church, 3], reward: { offering: 120, gems: 3 }, go: 'b:church' },
+  { id: 'rectory3', icon: '🏠', name: '사제관 Lv3', desc: '사제관을 눌러 고쳐요 · 행동력이 늘어요', need: () => [_qn.fixed('rectory'), 3], reward: { offering: 100 }, go: 'b:rectory' },
+  { id: 'statue', icon: '🙏', name: '마당에 성모상 모시기', desc: '짓기 → 조경 → 성모상', need: () => [_qn.decor('statue'), 1], reward: { offering: 80, heart: 2 }, go: 'decor' },
+  { id: 'lit1', icon: '🕯️', name: '평일미사 열기', desc: '성당을 눌러 평일 전례를 하나 열어요', need: () => [Object.keys(litState().open).length, 1], reward: { offering: 80, heart: 1 }, go: 'b:church' },
+  { id: 'grp2lv2', icon: '📈', name: '단체 키우기', desc: '단체 둘을 Lv2로', need: () => [_qn.groupsAt(2), 2], reward: { offering: 100 }, go: 'groups' },
+  { id: 'lot3', icon: '🏞️', name: '땅 한 곳 더 넓히기', desc: '짓기 → 땅 넓히기', need: () => [_qn.lots(), 3], reward: { offering: 140, gems: 3 }, go: 'lots' },
   // 2장: 본당 가꾸기 (10분 간격)
-  { id: 'path15', icon: '🛤️', name: '건물마다 길 잇기', desc: '길을 15칸까지', need: () => [_qn.paths(), 15], reward: { offering: 40 }, go: 'path' },
-  { id: 'clear15', icon: '🌳', name: '새 땅 정리하기', desc: '잡초·돌·나무를 15곳까지', need: () => [_qn.cleared(), 15], reward: { offering: 60 }, go: 'clear' },
-  { id: 'room3', icon: '📦', name: '교리실 셋', desc: '짓기 → 교리실', need: () => [containerCount(), 3], reward: { offering: 70 }, go: 'build' },
-  { id: 'fence2', icon: '🤍', name: '하얀 나무 울타리로 바꾸기', desc: '짓기 → 울타리 Lv2 (성당 Lv3부터)', need: () => [Game.state.pastor.fence || 0, 2], reward: { offering: 70, heart: 1 }, go: 'fence' },
-  { id: 'flower3', icon: '🌷', name: '꽃길 만들기', desc: '화단을 3개까지', need: () => [_qn.decor('flowerbed'), 3], reward: { offering: 40, heart: 1 }, go: 'decor' },
-  { id: 'office3', icon: '🗂️', name: '사무실 Lv3', desc: '사무실을 눌러 고쳐요', need: () => [_qn.fixed('office'), 3], reward: { offering: 70 }, go: 'b:office' },
-  { id: 'church4', icon: '⛪', name: '가건물 성당으로 (Lv4)', desc: '성당을 눌러 증축해요', need: () => [Game.state.pastor.fixed.church, 4], reward: { offering: 100, gems: 5 }, go: 'b:church' },
-  { id: 'mem300', icon: '👥', name: '신자 300명', desc: '주일미사·단체·거두기로 새 얼굴이 와요', need: () => [Math.floor(Game.state.pastor.res.members), 300], reward: { offering: 60, heart: 1 }, go: 'b:church' },
-  { id: 'parking', icon: '🅿️', name: '주차장 만들기', desc: '짓기 → 조경 → 주차장 · 먼 마을 교우도 와요', need: () => [_qn.decor('parking'), 1], reward: { offering: 60 }, go: 'decor' },
-  { id: 'cate1', icon: '📘', name: '예비신자 교리반 열기', desc: '위쪽 📘을 눌러 교리반을 열어요', need: () => [cateState().classes || 0, 1], reward: { offering: 50, heart: 1 }, go: 'cate' },
-  { id: 'crew1', icon: '👷', name: '일꾼 한 사람 더 쓰기', desc: '사무실 → 직원 채용', need: () => [crew().length, 1], reward: { offering: 60 }, go: 'b:office' },
-  { id: 'maryGarden', icon: '⛰️', name: '성모동산 꾸미기', desc: '짓기 → 조경 → 성모동산', need: () => [_qn.decor('maryGarden'), 1], reward: { offering: 80, heart: 2 }, go: 'decor' },
-  { id: 'grp2lv3', icon: '📈', name: '단체를 Lv3로', desc: '단체 둘을 Lv3로', need: () => [_qn.groupsAt(3), 2], reward: { offering: 80 }, go: 'groups' },
-  { id: 'village', icon: '🗺️', name: '윗말 길 열기', desc: '길 끝의 이장님을 찾아가요', need: () => [villageOpen('v1') ? 1 : 0, 1], reward: { offering: 80, gems: 5 }, go: 'elder' },
-  { id: 'lot4', icon: '🏞️', name: '서남쪽 언덕까지 넓히기', desc: '짓기 → 땅 넓히기 (성당 Lv4부터)', need: () => [_qn.lots(), 4], reward: { offering: 100, gems: 3 }, go: 'lots' },
-  { id: 'clear25', icon: '🌳', name: '본당 둘레 말끔히', desc: '잡초·돌·나무를 25곳까지', need: () => [_qn.cleared(), 25], reward: { offering: 80 }, go: 'clear' },
-  { id: 'stations', icon: '✝️', name: '야외 십자가의 길', desc: '짓기 → 조경 → 십자가의 길 (성당 Lv4부터)', need: () => [_qn.decor('stations'), 1], reward: { offering: 80, heart: 2 }, go: 'decor' },
-  { id: 'church5', icon: '⛪', name: '큰 가건물 성당 (Lv5)', desc: '성당을 눌러 증축해요', need: () => [Game.state.pastor.fixed.church, 5], reward: { offering: 150, gems: 5 }, go: 'b:church' },
-  { id: 'fence3', icon: '🪨', name: '돌담 쌓기', desc: '짓기 → 울타리 Lv3 (성당 Lv5부터)', need: () => [Game.state.pastor.fence || 0, 3], reward: { offering: 100, heart: 2 }, go: 'fence' },
-  { id: 'path30', icon: '🛤️', name: '본당 구석구석 길', desc: '길을 30칸까지', need: () => [_qn.paths(), 30], reward: { offering: 60 }, go: 'path' },
-  { id: 'mem500', icon: '👥', name: '신자 500명', desc: '좌석이 모자라면 미사를 늘려요', need: () => [Math.floor(Game.state.pastor.res.members), 500], reward: { offering: 100, heart: 1 }, go: 'b:church' },
-  { id: 'bapt20', icon: '🕊️', name: '세례자 20명', desc: '교리반을 마친 예비신자가 주일에 세례를 받아요', need: () => [Game.state.pastor.baptizedTotal || 0, 20], reward: { offering: 120, gems: 5 }, go: 'cate' },
+  { id: 'path15', icon: '🛤️', name: '건물마다 길 잇기', desc: '길을 15칸까지', need: () => [_qn.paths(), 15], reward: { offering: 80 }, go: 'path' },
+  { id: 'clear15', icon: '🌳', name: '새 땅 정리하기', desc: '잡초·돌·나무를 15곳까지', need: () => [_qn.cleared(), 15], reward: { offering: 120 }, go: 'clear' },
+  { id: 'room3', icon: '📦', name: '교리실 셋', desc: '짓기 → 교리실', need: () => [containerCount(), 3], reward: { offering: 140 }, go: 'build' },
+  { id: 'fence2', icon: '🤍', name: '새 하얀 펜스로 바꾸기', desc: '짓기 → 담장 Lv2 (성당 Lv3부터)', need: () => [Game.state.pastor.fence || 0, 2], reward: { offering: 140, heart: 1 }, go: 'fence' },
+  { id: 'flower3', icon: '🌷', name: '꽃길 만들기', desc: '화단을 3개까지', need: () => [_qn.decor('flowerbed'), 3], reward: { offering: 80, heart: 1 }, go: 'decor' },
+  { id: 'office3', icon: '🗂️', name: '사무실 Lv3', desc: '사무실을 눌러 고쳐요', need: () => [_qn.fixed('office'), 3], reward: { offering: 140 }, go: 'b:office' },
+  { id: 'church4', icon: '⛪', name: '가건물 성당으로 (Lv4)', desc: '성당을 눌러 증축해요', need: () => [Game.state.pastor.fixed.church, 4], reward: { offering: 200, gems: 5 }, go: 'b:church' },
+  { id: 'mem300', icon: '👥', name: '신자 300명', desc: '주일미사·단체·거두기로 새 얼굴이 와요', need: () => [Math.floor(Game.state.pastor.res.members), 300], reward: { offering: 120, heart: 1 }, go: 'b:church' },
+  { id: 'parking', icon: '🅿️', name: '주차장 만들기', desc: '짓기 → 조경 → 주차장 · 먼 마을 교우도 와요', need: () => [_qn.decor('parking'), 1], reward: { offering: 120 }, go: 'decor' },
+  { id: 'cate1', icon: '📘', name: '예비신자 교리반 열기', desc: '위쪽 📘을 눌러 교리반을 열어요', need: () => [cateState().classes || 0, 1], reward: { offering: 100, heart: 1 }, go: 'cate' },
+  { id: 'crew1', icon: '👷', name: '일꾼 한 사람 더 쓰기', desc: '사무실 → 직원 채용', need: () => [crew().length, 1], reward: { offering: 120 }, go: 'b:office' },
+  { id: 'maryGarden', icon: '⛰️', name: '성모동산 꾸미기', desc: '짓기 → 조경 → 성모동산', need: () => [_qn.decor('maryGarden'), 1], reward: { offering: 160, heart: 2 }, go: 'decor' },
+  { id: 'grp2lv3', icon: '📈', name: '단체를 Lv3로', desc: '단체 둘을 Lv3로', need: () => [_qn.groupsAt(3), 2], reward: { offering: 160 }, go: 'groups' },
+  { id: 'village', icon: '🗺️', name: '윗말 길 열기', desc: '길 끝의 이장님을 찾아가요', need: () => [villageOpen('v1') ? 1 : 0, 1], reward: { offering: 160, gems: 5 }, go: 'elder' },
+  { id: 'lot4', icon: '🏞️', name: '서남쪽 언덕까지 넓히기', desc: '짓기 → 땅 넓히기 (성당 Lv4부터)', need: () => [_qn.lots(), 4], reward: { offering: 200, gems: 3 }, go: 'lots' },
+  { id: 'clear25', icon: '🌳', name: '본당 둘레 말끔히', desc: '잡초·돌·나무를 25곳까지', need: () => [_qn.cleared(), 25], reward: { offering: 160 }, go: 'clear' },
+  { id: 'stations', icon: '✝️', name: '야외 십자가의 길', desc: '짓기 → 조경 → 십자가의 길 (성당 Lv4부터)', need: () => [_qn.decor('stations'), 1], reward: { offering: 160, heart: 2 }, go: 'decor' },
+  { id: 'church5', icon: '⛪', name: '큰 가건물 성당 (Lv5)', desc: '성당을 눌러 증축해요', need: () => [Game.state.pastor.fixed.church, 5], reward: { offering: 300, gems: 5 }, go: 'b:church' },
+  { id: 'fence3', icon: '🧱', name: '시멘트 담벼락 쌓기', desc: '짓기 → 담장 Lv3 (성당 Lv5부터)', need: () => [Game.state.pastor.fence || 0, 3], reward: { offering: 200, heart: 2 }, go: 'fence' },
+  { id: 'path30', icon: '🛤️', name: '본당 구석구석 길', desc: '길을 30칸까지', need: () => [_qn.paths(), 30], reward: { offering: 120 }, go: 'path' },
+  { id: 'mem500', icon: '👥', name: '신자 500명', desc: '좌석이 모자라면 미사를 늘려요', need: () => [Math.floor(Game.state.pastor.res.members), 500], reward: { offering: 200, heart: 1 }, go: 'b:church' },
+  { id: 'bapt20', icon: '🕊️', name: '세례자 20명', desc: '교리반을 마친 예비신자가 주일에 세례를 받아요', need: () => [Game.state.pastor.baptizedTotal || 0, 20], reward: { offering: 240, gems: 5 }, go: 'cate' },
 ];
 const PARISHES = {
   solmoe: { name: '솔뫼 본당', short: '솔뫼', icon: '⛰️', kind: '산골 본당', place: '솔뫼 면',
@@ -1900,13 +1900,12 @@ const LOTS = [
 // v0.80: 지도를 두 배 칸으로 나눴다 (maps.js MAP_GRID)
 for (const l of LOTS) { l.x *= 2; l.y *= 2; l.w *= 2; l.h *= 2; }
 // 울타리: 산 땅 둘레에 두른다. 레벨이 오를수록 좋은 울타리로 바뀌고, 둘레가 길수록 비싸다
-const FENCE_LEVELS = [
+const FENCE_LEVELS = [  // v1.07: 사용자 "낡은 펜스 → 새 펜스 → 시멘트 담벼락 → 벽돌 화단" (그림 assets/sprites/fence-lv1~4, tools/blender/make-fence.py)
   null,
-  { name: '나무 말뚝 울타리', icon: '🪵', per: 0.75, church: 1, heart: 1, rep: 0, desc: '나무 말뚝에 가로대를 걸친 소박한 울타리' },
-  { name: '하얀 나무 울타리', icon: '🤍', per: 1.5, church: 3, heart: 2, rep: 1, desc: '하얗게 칠한 나무 울타리. 마당이 단정해 보여요' },
-  { name: '돌담', icon: '🪨', per: 2.5, church: 5, heart: 3, rep: 2, desc: '돌을 쌓아 올린 나지막한 담. 시골 성당다운 멋이 있어요' },
-  { name: '벽돌 담장', icon: '🧱', per: 4, church: 7, heart: 4, rep: 3, desc: '붉은 벽돌 담장과 기둥. 성당 벽돌과 잘 어울려요' },
-  { name: '철제 울타리', icon: '⚜️', per: 6, church: 9, heart: 5, rep: 5, desc: '벽돌 기둥 사이에 금빛 끝장식의 검은 철제 울타리' },
+  { name: '낡은 나무 펜스', icon: '🪵', per: 0.75, church: 1, heart: 1, rep: 0, desc: '얻어 온 판자로 세운 비뚤비뚤한 펜스. 그래도 어디까지가 성당인지는 알 수 있어요' },
+  { name: '새 하얀 펜스', icon: '🤍', per: 1.5, church: 3, heart: 2, rep: 1, desc: '하얗게 칠한 새 나무 펜스. 마당이 단정해 보여요' },
+  { name: '시멘트 담벼락', icon: '🧱', per: 2.5, church: 5, heart: 3, rep: 2, desc: '시멘트 블록을 쌓고 갓돌을 얹은 튼튼한 담' },
+  { name: '벽돌 화단 담', icon: '🌷', per: 4, church: 7, heart: 4, rep: 3, desc: '붉은 벽돌로 쌓은 화단 담. 꽃이 피어 지나는 사람도 웃어요' },
 ];
 
 const DECOR = {
@@ -2040,7 +2039,7 @@ const QUEST_FROM = {
   room2: ['council', '레지오랑 구역 모임이 한 방을 나눠 써요. 교리실이 하나 더 있어야겠습니다.'],
   group2: ['council', '흩어졌던 교우들이 다시 모이고 싶어 해요. 단체를 하나 더 꾸려 보시지요.'],
   office2: ['clerk', '신부님, 금고가 작아서 봉헌금 둘 데가 없어요. 사무실을 좀 손봐 주세요.'],
-  fence1: ['council', '어디까지가 성당 땅인지 마을 분들이 헷갈려하세요. 울타리를 둘러 경계를 지읍시다.'],
+  fence1: ['council', '어디까지가 성당 땅인지 마을 분들이 헷갈려하세요. 판자라도 얻어다 펜스를 세워 경계를 지읍시다.'],
   clear8: ['faithful', '성당 뒤쪽은 아직 풀숲이에요. 아이들이 뛰어놀 수 있게 더 치워 주세요.'],
   lot2: ['council', '옆 텃밭 주인이 땅을 내놓았답니다. 본당 땅을 넓힐 좋은 기회예요.'],
   church3: ['deanery', '솔뫼 본당 교우가 늘었다고 들었습니다. 지구에서도 성당 증축을 응원합니다.'],
@@ -2052,7 +2051,7 @@ const QUEST_FROM = {
   path15: ['clerk', '교리실이랑 사무실 사이가 멀어서 서류 들고 다니기 힘들어요. 길을 이어 주세요.'],
   clear15: ['faithful', '새로 산 땅에 돌이 많아요. 저희도 거들 테니 함께 치워요.'],
   room3: ['council', '주일학교 아이들 모일 방이 없어요. 교리실을 하나 더 놓아야겠어요.'],
-  fence2: ['faithful', '울타리가 너무 낡았어요. 하얗게 칠한 울타리면 성당이 환해 보일 거예요.'],
+  fence2: ['faithful', '펜스가 너무 낡아서 쓰러질 것 같아요. 하얗게 칠한 새 펜스면 성당이 환해 보일 거예요.'],
   flower3: ['faithful', '꽃이 피니 참 좋네요. 성당 가는 길을 꽃길로 만들어 봐요.'],
   office3: ['clerk', '교적과 장부가 산더미예요. 사무실을 넓혀야 일을 할 수 있어요.'],
   church4: ['vicariate', '대리구에서 알립니다. 솔뫼 본당은 가건물 성당으로 증축할 때가 되었습니다.'],
@@ -2067,7 +2066,7 @@ const QUEST_FROM = {
   clear25: ['deanery', '다음 달 지구 성지순례 때 솔뫼에 들르기로 했습니다. 성당 둘레를 단정히 해 주세요.'],
   stations: ['faithful', '사순 시기에 십자가의 길 기도를 마당에서 바치고 싶어요.'],
   church5: ['vicariate', '대리구에서 알립니다. 솔뫼 본당의 큰 가건물 성당 증축을 승인합니다.'],
-  fence3: ['council', '시골 성당엔 돌담이 제격이지요. 마을 어르신들이 돌을 모아 주셨어요.'],
+  fence3: ['council', '펜스로는 바람도 못 막아요. 시멘트 블록으로 튼튼한 담을 쌓읍시다. 형제님들이 일손을 보태 주신대요.'],
   path30: ['faithful', '성당 구석구석 길이 이어지면 어르신들이 안심하고 다니실 거예요.'],
   mem500: ['diocese', '수원교구 공문: 솔뫼 본당의 성장을 눈여겨보고 있습니다. 교우 500명에 이르기를 바랍니다.'],
   bapt20: ['diocese', '수원교구 공문: 올해 새 영세자 20명을 목표로, 본당의 선교에 힘써 주십시오.'],

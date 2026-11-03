@@ -990,7 +990,7 @@ function buildSpeed() { return Math.max(0.6, 1 + 0.15 * unitLevels('youth') + (G
 // 적응 기간: 성당 Lv3까지는 공사가 빠르고 싸며, 새 얼굴이 더 많이 찾아온다 (처음 게임에 익숙해지도록)
 const NEWBIE = { maxChurch: 3, time: 0.25, cost: 0.55, members: 3, offering: 2.2, upkeep: 0.5 };
 // 첫 본당 (v0.92 사용자 요청): 적응 기간이 끝나도 첫 발령까지는 조금 더 빠르게. 게임을 익히는 동안 속도감 있게
-const FIRST_PARISH = { time: 0.5, cost: 0.8, offering: 1.8, members: 2 };  // v1.05: 첫 발령까지 1~2일이 되도록 더 빠르게
+const FIRST_PARISH = { time: 0.5, cost: 0.65, offering: 3, members: 3.5 };  // v1.07: 퀘스트를 깨기에 신자·돈이 모자라 더 늘림 (v1.05: 0.8·1.8·2)
 function firstParish() { const p = Game.state.pastor; return !!p && !(p.career && p.career.length) && !newbie() ? FIRST_PARISH : null; }
 function newbie() { const p = Game.state.pastor; return !!p && !(p.career && p.career.length) && p.fixed.church <= NEWBIE.maxChurch; }
 
@@ -1651,6 +1651,39 @@ const GEM_PACKS = [
 ];
 function gems() { const p = Game.state.pastor; return p ? Math.floor(p.gems || 0) : 0; }
 function addGems(n) { const p = Game.state.pastor; p.gems = Math.max(0, (p.gems || 0) + n); return n; }
+// v1.07: 다이아로 봉헌금 사기. 받는 양은 지금 본당 봉헌(시간당)의 몇 시간어치라 본당이 커져도 쓸모가 있다 (최소 금액 보장, 금고 한도까지)
+const GOLD_PACKS = [
+  { gems: 10, hours: 2, min: 60, name: '봉헌 바구니' },
+  { gems: 30, hours: 7, min: 200, name: '봉헌 자루', tag: '+17%' },
+  { gems: 80, hours: 20, min: 600, name: '봉헌 궤짝', tag: '+25%' },
+];
+function goldPackAmount(g) { return Math.round(Math.max(g.min, parishRates().gross * g.hours) / 10) * 10; }
+// v1.07: 다이아로 신자 모시기 (성당 자리의 몇 %, 최소 인원 보장, 자리 한도까지)
+const MEMBER_PACKS = [
+  { gems: 15, frac: 0.05, min: 5, name: '이웃 초대' },
+  { gems: 40, frac: 0.15, min: 15, name: '새 얼굴 모임', tag: '+13%' },
+  { gems: 100, frac: 0.4, min: 40, name: '선교 주간', tag: '+20%' },
+];
+function memberPackAmount(g) { return Math.max(g.min, Math.round(churchSeats() * g.frac)); }
+function buyMembers(i) {
+  const g = MEMBER_PACKS[i], p = Game.state.pastor;
+  if (!g || !p) return null;
+  if (gems() < g.gems) return { short: true };
+  if (churchSeats() - p.res.members < 1) return { full: true };
+  const got = addRes('members', memberPackAmount(g));
+  addGems(-g.gems); addLog(`💎 다이아 ${g.gems}개로 새 신자 ${Math.round(got)}명`);
+  return { got: Math.round(got) };
+}
+function buyGold(i) {
+  const g = GOLD_PACKS[i], p = Game.state.pastor;
+  if (!g || !p) return null;
+  if (gems() < g.gems) return { short: true };
+  const room = vaultCap() - p.res.offering;
+  if (room < 1) return { full: true };
+  const got = addRes('offering', goldPackAmount(g));
+  addGems(-g.gems); addLog(`💎 다이아 ${g.gems}개로 봉헌금 ${Math.round(got)}만 원`);
+  return { got: Math.round(got) };
+}
 function rushCost(j) {
   if (!j) return 0;
   const m = Math.max(0, j.until - Date.now()) / 60000;
@@ -2478,7 +2511,7 @@ function buyLot(id) {
   const l = LOTS.find(x => x.id === id), p = Game.state.pastor, cost = lotCost(l);
   p.res.offering -= cost; book(null, 'building', cost);
   lotsOwned()[id] = true;
-  const msg = `🏞️ ${l.name} 땅을 샀어요 (💰${cost}). 본당 땅이 넓어졌어요${p.fence ? ' · 울타리도 새 땅 둘레로 옮겨 둘렀어요' : ''}`;
+  const msg = `🏞️ ${l.name} 땅을 샀어요 (💰${cost}). 본당 땅이 넓어졌어요${p.fence ? ' · 담장도 새 땅 둘레로 옮겨 세웠어요' : ''}`;
   addLog(msg);
   return msg;
 }
@@ -2500,7 +2533,7 @@ function fenceEdges() {
 function fenceCost(level) { return scaledCost(FENCE_LEVELS[level].per * fenceEdges().length); }
 function fenceBlocker() {
   const p = Game.state.pastor, to = (p.fence || 0) + 1, f = FENCE_LEVELS[to];
-  if (!f) return '가장 좋은 울타리예요';
+  if (!f) return '가장 좋은 담장이에요';
   if (p.fixed.church < f.church) return `성당 Lv${f.church}부터 지을 수 있어요`;
   if (p.res.offering < fenceCost(to)) return `봉헌금 ${fenceCost(to)}만 원이 필요해요`;
   return null;
@@ -2510,7 +2543,7 @@ function buildFence() {
   const p = Game.state.pastor, to = (p.fence || 0) + 1, f = FENCE_LEVELS[to], cost = fenceCost(to);
   p.res.offering -= cost; book(null, 'building', cost);
   p.fence = to;
-  const msg = `${f.icon} 본당 땅 둘레에 ${f.name}${josa(f.name, '을', '를').slice(f.name.length)} 둘렀어요 (💰${cost})`;
+  const msg = `${f.icon} 본당 땅 둘레에 ${f.name}${josa(f.name, '을', '를').slice(f.name.length)} 세웠어요 (💰${cost})`;
   addLog(msg);
   return msg;
 }

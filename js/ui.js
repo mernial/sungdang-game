@@ -1611,9 +1611,9 @@ function openBuildCatalog() {
         sub: '본당 땅을 사서 넓혀요. 산 땅에만 교리실·조경·길을 놓을 수 있어요',
         onClick: () => setTimeout(openLotList, 0),
       }, {
-        tile: true, tileSub: (() => { const b = fenceBlocker(), to = (p.fence || 0) + 1; return FENCE_LEVELS[to] ? (b && !b.startsWith('봉헌금') ? `🔒 ${b}` : `💰${fenceCost(to)}`) : '가장 좋은 울타리'; })(),
-        label: `${p.fence ? FENCE_LEVELS[p.fence].icon : '🪵'} 울타리${p.fence ? ` Lv${p.fence}` : ''}`,
-        sub: '산 땅 둘레에 울타리를 둘러요. 레벨이 오를수록 좋은 울타리가 되고 마음·평판이 올라요',
+        tile: true, tileSub: (() => { const b = fenceBlocker(), to = (p.fence || 0) + 1; return FENCE_LEVELS[to] ? (b && !b.startsWith('봉헌금') ? `🔒 ${b}` : `💰${fenceCost(to)}`) : '가장 좋은 담장'; })(),
+        label: `${p.fence ? FENCE_LEVELS[p.fence].icon : '🪵'} 담장${p.fence ? ` Lv${p.fence}` : ''}`,
+        sub: '산 땅 둘레에 담장을 세워요. 레벨이 오를수록 좋은 담장이 되고 마음·평판이 올라요',
         onClick: () => setTimeout(openFenceMenu, 0),
       }]),
       {
@@ -1633,12 +1633,12 @@ function openBuildCatalog() {
 
 const PLACE_NAME = { container: '컨테이너 교리실', gongso: '공소' };
 
-// ---------- 본당 부지·울타리 (v0.70) ----------
+// ---------- 본당 부지·담장 (v0.70) ----------
 function openLotMenu(id) {
   const l = LOTS.find(x => x.id === id), block = lotBlocker(id), own = lotsOwned()[id];
   modal({
     title: `🏞️ ${l.name}`,
-    html: `<p class="small">${l.desc}</p><p class="muted">${l.w}×${l.h}칸 · ${own ? '본당 땅이에요' : `사면 이 땅에 교리실·조경·길을 놓고, 잡초·돌·나무를 치울 수 있어요${lotsOwned().home && Game.state.pastor.fence ? ' · 울타리도 새 땅 둘레로 넓혀 둘러요' : ''}`}</p>`,
+    html: `<p class="small">${l.desc}</p><p class="muted">${l.w}×${l.h}칸 · ${own ? '본당 땅이에요' : `사면 이 땅에 교리실·조경·길을 놓고, 잡초·돌·나무를 치울 수 있어요${lotsOwned().home && Game.state.pastor.fence ? ' · 담장도 새 땅 둘레로 넓혀 둘러요' : ''}`}</p>`,
     options: own ? [] : [{ label: `🏞️ 땅 사기 · 💰${lotCost(l)}`, sub: block || '바로 본당 땅이 돼요', disabled: !!block,
       onClick: () => { const m = buyLot(id); if (m) toast(m); } }],
     buttons: [{ label: '닫기', cls: 'ghost' }],
@@ -1656,11 +1656,11 @@ function openLotList() {
 function openFenceMenu() {
   const p = Game.state.pastor, cur = FENCE_LEVELS[p.fence || 0], to = (p.fence || 0) + 1, next = FENCE_LEVELS[to], block = fenceBlocker();
   modal({
-    title: `${cur ? cur.icon : '🪵'} 울타리${cur ? ` · ${cur.name}` : ''}`,
-    html: `<p class="small">산 본당 땅 둘레(${fenceEdges().length}칸)에 울타리를 둘러요. 땅을 더 사면 울타리도 새 둘레로 옮겨 둘러요. 길이 지나는 곳은 문처럼 비워 둬요.</p>
+    title: `${cur ? cur.icon : '🪵'} 담장${cur ? ` · ${cur.name}` : ''}`,
+    html: `<p class="small">산 본당 땅 둘레(${fenceEdges().length}칸)에 담장을 세워요. 땅을 더 사면 담장도 새 둘레로 옮겨 세워요. 길이 지나는 곳은 문처럼 비워 둬요.</p>
       <p class="muted">${FENCE_LEVELS.slice(1).map((f, i) => `${i + 1 === (p.fence || 0) ? '<b>' : ''}Lv${i + 1} ${f.icon} ${f.name} (성당 Lv${f.church})${i + 1 === (p.fence || 0) ? '</b>' : ''}`).join(' → ')}</p>`,
-    options: next ? [{ label: `${next.icon} ${p.fence ? '바꾸기' : '두르기'}: ${next.name} · 💰${fenceCost(to)}`, sub: block || `${next.desc} · ❤️ 목표 +${next.heart}${next.rep ? ` · 🌏 목표 +${next.rep}` : ''}`, disabled: !!block,
-      onClick: () => { const m = buildFence(); if (m) toast(m); } }] : [],
+    options: next ? [{ label: `${next.icon} ${p.fence ? '바꾸기' : '세우기'}: ${next.name} · 💰${fenceCost(to)}`, sub: block || `${next.desc} · ❤️ 목표 +${next.heart}${next.rep ? ` · 🌏 목표 +${next.rep}` : ''}`, disabled: !!block,
+      onClick: () => { const m = buildFence(); if (m) { toast(m); save(); syncWorldLayout(); } } }] : [],
     buttons: [{ label: '닫기', cls: 'ghost' }],
   });
 }
@@ -3097,7 +3097,7 @@ function migrateSave(s) {
     for (const id of Object.keys(p.cleared || {})) { const m = id.match(/^o(\d+)_(\d+)$/); if (m) mark(+m[1], +m[2]); else { const h = (MAPS.solmoe.landHouses || []).find(q => q.id === id); if (h) mark(h.x, h.y); } }
     for (const k of Object.keys(p.paths || {})) mark(...k.split(',').map(Number));
     p.lots = own;
-    p.fence = p.fence || 0;
+    p.fence = Math.min(p.fence || 0, FENCE_LEVELS.length - 1); // v1.07: 담장 5단계 → 4단계
   }
   // v0.54: 수녀님 여러 분 (sister → sisters)
   if (s.pastor) installSisterAccessor(s.pastor);
@@ -3389,11 +3389,37 @@ function openGemShop() {
   const fmtWon = n => n.toLocaleString('ko-KR');
   modal({
     title: `💎 다이아 상점 · 가진 다이아 ${gems()}개`,
-    html: `<p class="small">다이아로 공사를 기다리지 않고 바로 끝낼 수 있어요. 남은 1시간은 다이아 약 21개예요.</p>
+    html: `<div class="shop-hero" style="background-image:url(${STORY_IMG('shop-gems')})"><span>💎 다이아 상점</span></div><p class="small">다이아로 공사를 기다리지 않고 바로 끝낼 수 있어요. 남은 1시간은 다이아 약 21개예요.</p>
       <p class="muted">빈터의 잡초·돌·나무를 치우다 보면 가끔 다이아를 주워요.</p>
       <p class="muted">⚠️ 시험판이라 실제 결제는 아직 연결되어 있지 않아요. 앱으로 출시할 때 구글 플레이·앱스토어 결제와 연결해요. 지금은 눌러도 돈이 나가지 않고 시험용 다이아를 받아요.</p>`,
     options: GEM_PACKS.map(g => ({ tile: true, label: `💎 ${fmtWon(g.gems)}개`, tileSub: `₩${fmtWon(g.won)}${g.tag ? ` · ${g.tag}` : ''}`, sub: `${g.name} · ₩${fmtWon(g.won)} (시험판: 무료로 받기)`,
       onClick: () => { addGems(g.gems); addLog(`💎 시험용 다이아 ${g.gems}개를 받았어요`); toast(`💎 다이아 ${fmtWon(g.gems)}개를 받았어요 (시험판 · 결제 없음)`); } })),
+    buttons: [{ label: '💰👥 다이아로 봉헌금·신자 사기', onClick: () => setTimeout(openGoldShop, 0) }, { label: '닫기' }],
+  });
+}
+
+// v1.07: 다이아 → 봉헌금
+function openGoldShop() {
+  const p = Game.state.pastor, room = Math.max(0, Math.floor(vaultCap() - p.res.offering)), seatRoom = Math.max(0, Math.floor(churchSeats() - p.res.members));
+  modal({
+    title: `💎 다이아로 사기 · 가진 다이아 ${gems()}개`,
+    html: `<div class="shop-duo"><div class="shop-hero" style="background-image:url(${STORY_IMG('shop-gold')})"><span>💰 봉헌금</span></div><div class="shop-hero" style="background-image:url(${STORY_IMG('shop-members')})"><span>👥 새 신자</span></div></div><p class="small">다이아로 봉헌금을 채우거나 새 신자를 모셔요. 본당이 클수록 받는 양도 늘어요.</p>
+      <p class="muted">금고: 💰 ${Math.floor(p.res.offering)} / ${vaultCap()} (남은 자리 ${room}만 원) · 신자: 👥 ${Math.floor(p.res.members)} / ${churchSeats()} (남은 자리 ${seatRoom}명). 넘는 몫은 못 받아요 · 사무실을 올리면 금고가, 성당을 올리면 자리가 커져요</p>`,
+    options: [...GOLD_PACKS.map((g, i) => { const amt = goldPackAmount(g), short = gems() < g.gems;
+      return { tile: true, label: `💰 ${amt.toLocaleString('ko-KR')}만 원`, tileSub: `💎${g.gems}${g.tag ? ` · ${g.tag}` : ''}`,
+        sub: `${g.name} · 봉헌 약 ${g.hours}시간어치${amt > room ? ` · 금고에 ${room}만 원만 들어가요` : ''}${short ? ' · 다이아가 모자라요 (눌러서 상점)' : ''}`,
+        onClick: () => { const r = buyGold(i); if (!r) return;
+          if (r.short) { Sound.sfx('error'); setTimeout(openGemShop, 0); return; }
+          if (r.full) { toast('🔒 금고가 가득 찼어요. 먼저 봉헌금을 쓰거나 사무실을 올려요'); return; }
+          Sound.sfx('coin'); toast(`💰 다이아 ${g.gems}개로 봉헌금 ${r.got}만 원을 채웠어요`, true); save(); } }; }),
+      ...MEMBER_PACKS.map((g, i) => { const amt = memberPackAmount(g), short = gems() < g.gems;
+        return { tile: true, label: `👥 신자 ${amt}명`, tileSub: `💎${g.gems}${g.tag ? ` · ${g.tag}` : ''}`,
+          sub: `${g.name}${amt > seatRoom ? ` · 자리가 ${seatRoom}명뿐이에요` : ''}${short ? ' · 다이아가 모자라요 (눌러서 상점)' : ''}`,
+          onClick: () => { const r = buyMembers(i); if (!r) return;
+            if (r.short) { Sound.sfx('error'); setTimeout(openGemShop, 0); return; }
+            if (r.full) { toast('🔒 성당 자리가 가득 찼어요. 성당을 올리면 자리가 늘어요'); return; }
+            Sound.sfx('meet'); toast(`👥 다이아 ${g.gems}개로 새 신자 ${r.got}명을 모셨어요`, true); save(); } }; })],
+    buttons: [{ label: '💎 다이아 상점', onClick: () => setTimeout(openGemShop, 0) }, { label: '닫기' }],
   });
 }
 
