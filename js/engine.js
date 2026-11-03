@@ -118,7 +118,7 @@ function spendEnergy(n) { Game.state.energy = Math.max(0, Game.state.energy - n)
 
 // ---------- 행동력 회복 ----------
 
-function regenMs() { return REGEN_SEC * 1000 / (Game.state.testMode ? 60 : 1); }
+function regenMs() { return REGEN_SEC * 1000 / (Game.state.testMode ? 60 : 1) / 1.25; } // v0.92: 행동력도 조금 빨리 찬다
 
 // 신학교에서는 챕터마다 채워 주므로 시간 회복은 본당부터
 function regenEnergy() {

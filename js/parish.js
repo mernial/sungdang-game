@@ -4,6 +4,9 @@
 const SUNDAY_HOURS = 6;  // 주일미사 사이 간격 (실제 시간)
 
 function timeScale() { return Game.state.testMode ? 60 : 1; }
+// 본당이 굴러가는 빠르기 (v0.92 사용자 요청: 조금 더 빠르게). 봉헌·새 신자·살림·공사 시간에 곱한다. 시계(회의·미사 시각)와 주일 간격은 그대로
+const PACE = 1.5;
+function paceScale() { return timeScale() * PACE; }
 
 // ---------- 본당 시계 (회의 시간용). 평소엔 실제 시각, 테스트 모드에선 60배 빠르다 ----------
 
@@ -140,10 +143,52 @@ function transferReady() { const p = Game.state.pastor; return !!(p && p.transfe
 function transferWeeksLeft() { const p = Game.state.pastor; return p.transfer ? Math.max(0, p.transfer.due - p.week) : 0; }
 // 성당이 정한 레벨에 이르면 인사발령 예정 공문
 function checkTransferNotice(p) {
-  if (p.transfer || p.fixed.church < TRANSFER.church) return null;
-  p.transfer = { week: p.week, due: p.week + TRANSFER.weeks };
+  if (p.transfer) return null;
+  // 첫 본당은 퀘스트를 모두 마치면 (v1.05), 그 뒤 본당은 성당 레벨로
+  const first = questRun(p);
+  if (first ? !questsAllDone(p) : p.fixed.church < TRANSFER.church) return null;
+  const weeks = first ? FIRST_TRANSFER.weeks : TRANSFER.weeks;
+  p.transfer = { week: p.week, due: p.week + weeks };
   addLog('📜 교구에서 인사발령 예정 공문이 왔어요.');
-  return `📜 교구에서 인사발령 예정 공문이 왔어요. ${TRANSFER.weeks}주일 뒤 이 본당의 성적표를 보고 다음 행선지가 정해져요.`;
+  return `📜 교구에서 인사발령 예정 공문이 왔어요. ${weeks}주일 뒤 이 본당의 성적표를 보고 다음 행선지가 정해져요.`;
+}
+function transferNeedLabel() { return questRun(Game.state.pastor) ? `첫 본당 퀘스트 ${questDoneCount()}/${FIRST_QUESTS.length}를 마치면 인사발령` : `성당 Lv${TRANSFER.church}이 되면 인사발령`; }
+
+// ---------- 첫 본당 퀘스트 (v1.05) ----------
+// p.quest = { next: 다음에 꺼낼 번호, active: [id], done: {id: true}, nextAt: 다음 퀘스트가 생기는 시각 }
+function questRun(p) { p = p || Game.state.pastor; return !!p && !(p.career && p.career.length) && !parishDef().interior; }
+function questOn() { const p = Game.state.pastor; return questRun(p) && !(p.tutorial && TUTORIAL[p.tutorial.step] && TUTORIAL[p.tutorial.step].id !== 'grow'); }
+function questState() { const p = Game.state.pastor; return p.quest || (p.quest = { next: 0, active: [], done: {}, nextAt: 0 }); }
+function questDef(id) { return FIRST_QUESTS.find(q => q.id === id); }
+function questProgress(q) { const [have, want] = q.need(); return { have: Math.min(have, want), want, ok: have >= want }; }
+function questDoneCount(p) { p = p || Game.state.pastor; return Object.keys((p.quest && p.quest.done) || {}).length; }
+function questsAllDone(p) { return questDoneCount(p) >= FIRST_QUESTS.length; }
+function questActive() { return questOn() ? questState().active.map(questDef).filter(Boolean) : []; }
+function questNextSec() { const q = questState(); return q.next < FIRST_QUESTS.length ? Math.max(0, Math.ceil((q.nextAt - Date.now()) / 1000)) : 0; }
+// 걸린 퀘스트가 셋보다 적고 때가 되면 하나 꺼낸다. 걸린 게 하나도 없으면 기다리지 않고 바로
+function questTick(now = Date.now()) {
+  if (!questOn()) return [];
+  const q = questState(), out = [];
+  while (q.next < FIRST_QUESTS.length && q.active.length < QUEST_ACTIVE && (now >= q.nextAt || !q.active.length)) {
+    const d = FIRST_QUESTS[q.next++];
+    if (q.done[d.id]) continue;
+    q.active.push(d.id); out.push(d);
+    q.nextAt = now + questGapMin(q.next) * 60000 / timeScale();
+  }
+  return out;
+}
+function questRewardText(r) { return [r.offering ? `💰${r.offering}` : '', r.gems ? `💎${r.gems}` : '', r.heart ? `❤️+${r.heart}` : ''].filter(Boolean).join(' '); }
+function claimQuest(id) {
+  const q = questState(), d = questDef(id);
+  if (!d || !q.active.includes(id) || !questProgress(d).ok) return null;
+  q.active = q.active.filter(x => x !== id); q.done[id] = true;
+  const r = d.reward, got = r.offering ? addRes('offering', r.offering) : 0;
+  if (r.gems) addGems(r.gems);
+  if (r.heart) Game.state.pastor.res.heart = clamp(Game.state.pastor.res.heart + r.heart, 0, 100);
+  if (got) Game.state.pastor.weekIncome = (Game.state.pastor.weekIncome || 0) + got;
+  addLog(`📜 퀘스트 완료: ${d.name}`);
+  questTick();
+  return `📜 ${d.name} 완료! ${questRewardText(r)}`;
 }
 // 1년 더 머무르기: 몇 주일 뒤 다시 평가
 function stayLonger() { const p = Game.state.pastor; p.transfer = { week: p.week, due: p.week + TRANSFER.stayWeeks, stayed: (p.transfer && p.transfer.stayed || 0) + 1 }; addLog('📜 주교님께 이 본당에 조금 더 머물겠다고 말씀드렸어요.'); }
@@ -172,6 +217,8 @@ function addRes(key, v) {
   return r[key] - before;
 }
 
+// 넘친 봉헌을 사무실이 대신 거두는 비율: 사무실 Lv1 65% ~ Lv5 85%
+function autoCollectRate() { return Math.min(0.85, 0.6 + 0.05 * (Game.state.pastor.fixed.office || 1)); }
 function vaultCap() { return VAULT[Game.state.pastor.fixed.office || 1]; }
 
 function massCount() { const p = Game.state.pastor; return Math.max(1, (p && p.masses) || 1); }
@@ -374,8 +421,8 @@ function book(type, cat, amount) {
   if (type) { const g = L.groups[type] || (L.groups[type] = {}); g[cat] = (g[cat] || 0) + amount; }
   else L.parish[cat] = (L.parish[cat] || 0) + amount;
 }
-const LEDGER_ICON = { choirSnack: '🍪', conductor: '🎼', accompanist: '🎹', flowers: '💐', bouquetWedding: '💒', bouquetBaptism: '💐', schoolPrep: '📚', snack: '🍙', laundry: '🧺', hosts: '🍞', wine: '🍷', holyHour: '🕯️', feastCandle: '🕯️', mass: '🕰️', seminary: '🎓', shuttle: '🚐', edu: '🎓', bus: '🚌', food: '🍱', supply: '📦', extra: '➕', agenda: '📨', upkeep: '👥', staff: '👷', building: '🏠', levy: '🏛️', baptism: '🕊️', event: '🎉' };
-const LEDGER_NAME = { choirSnack: '성가대 간식비', conductor: '지휘자 봉사비', accompanist: '반주자 지원금', flowers: '꽃 구입비', bouquetWedding: '혼배 꽃다발 판매', bouquetBaptism: '세례식 꽃다발 판매', schoolPrep: '교리 준비비', snack: '간식 재료비', laundry: '제대포·제의 세탁비', hosts: '제병 구입비', wine: '미사주 구입비', holyHour: '성시간 컵초 판매', feastCandle: '대축일 컵초 판매', mass: '미사 경비', seminary: '신학교 지원비', shuttle: '셔틀버스 기름값', edu: '교육·연수비', bus: '버스 대여비', food: '식사·다과비', supply: '재료·물품비', extra: '추가 지원', agenda: '상임위 건의', upkeep: '단체 활동비', staff: '인건비', building: '건물 살림', levy: '교구 공납금', baptism: '세례식' };
+const LEDGER_ICON = { autoCollect: '🗂️', choirSnack: '🍪', conductor: '🎼', accompanist: '🎹', flowers: '💐', bouquetWedding: '💒', bouquetBaptism: '💐', schoolPrep: '📚', snack: '🍙', laundry: '🧺', hosts: '🍞', wine: '🍷', holyHour: '🕯️', feastCandle: '🕯️', mass: '🕰️', seminary: '🎓', shuttle: '🚐', edu: '🎓', bus: '🚌', food: '🍱', supply: '📦', extra: '➕', agenda: '📨', upkeep: '👥', staff: '👷', building: '🏠', levy: '🏛️', baptism: '🕊️', event: '🎉' };
+const LEDGER_NAME = { choirSnack: '성가대 간식비', conductor: '지휘자 봉사비', accompanist: '반주자 지원금', flowers: '꽃 구입비', bouquetWedding: '혼배 꽃다발 판매', bouquetBaptism: '세례식 꽃다발 판매', schoolPrep: '교리 준비비', snack: '간식 재료비', laundry: '제대포·제의 세탁비', hosts: '제병 구입비', wine: '미사주 구입비', holyHour: '성시간 컵초 판매', feastCandle: '대축일 컵초 판매', mass: '미사 경비', seminary: '신학교 지원비', shuttle: '셔틀버스 기름값', edu: '교육·연수비', bus: '버스 대여비', food: '식사·다과비', supply: '재료·물품비', extra: '추가 지원', agenda: '상임위 건의', upkeep: '단체 활동비', staff: '인건비', building: '건물 살림', levy: '교구 공납금', baptism: '세례식', autoCollect: '사무실이 대신 거둔 봉헌' };
 // 활동비를 줄인 단체 (살림 30% 줄지만 매일 활력 −3)
 function groupCut(type) { return groupBudget(type) === 'low'; }
 // ---------- 단체별 지원 수준 ----------
@@ -783,8 +830,9 @@ function sourceRates() {
   if (hasChair('smallCom')) for (const v of Object.values(out)) v.offering *= 1.05;
   if (hasPerk('district3')) for (const v of Object.values(out)) v.offering *= 1.1;
   if (nb) for (const v of Object.values(out)) { v.offering *= NEWBIE.offering; v.members *= NEWBIE.members; }
+  { const fp = firstParish(); if (fp) for (const v of Object.values(out)) { v.offering *= fp.offering; v.members *= fp.members; } }
   // 본당 성격 (도심은 봉헌이 많고, 어촌은 사람이 덜 느는 식)
-  const mo = parishMod('offering') * dirMod('offering'), mm = parishMod('members') * dirMod('members');
+  const mo = parishMod('offering') * dirMod('offering') * OFFERING_BOOST, mm = parishMod('members') * dirMod('members');
   if (mo !== 1 || mm !== 1) for (const v of Object.values(out)) { v.offering *= mo; v.members *= mm; }
   return out;
 }
@@ -865,7 +913,8 @@ function tickParish(now = Date.now()) {
   for (const j of p.jobs.filter(j => now >= j.until)) out.done.push(finishJob(j));
   out.dayLines = p_newDay(p);
   out.dayLines.push(...autoSundays(now));
-  const hours = Math.min(idleCapHours(), Math.max(0, now - p.lastTick) / 3600000 * timeScale());
+  out.quests = questTick(now);
+  const hours = Math.min(idleCapHours(), Math.max(0, now - p.lastTick) / 3600000 * paceScale());
   p.lastTick = now;
   out.applicants = hiringTick(hours);
   blessTick(now, hours, out.dayLines);
@@ -875,10 +924,18 @@ function tickParish(now = Date.now()) {
   const before = { ...r };
   // 봉헌과 새 얼굴은 건물마다 쌓인다 (눌러서 거둔다). 담을 수 있는 양까지만
   const stashBefore = stashList().reduce((a, x) => ({ offering: a.offering + x.offering, members: a.members + x.members }), { offering: 0, members: 0 });
+  let overflow = 0;
   for (const [id, rate] of Object.entries(sourceRates())) {
-    const st = stashOf(id), cap = stashCap(rate);
+    const st = stashOf(id), cap = stashCap(rate), o0 = st.offering;
     st.offering = Math.min(Math.max(st.offering, cap.offering), st.offering + rate.offering * hours);
+    overflow += Math.max(0, rate.offering * hours - (st.offering - o0));
     st.members = Math.min(Math.max(st.members, cap.members), st.members + rate.members * hours);
+  }
+  // 말풍선이 꽉 차 넘치는 봉헌은 사무실 직원이 대신 거둬 금고에 넣는다 (v0.92, 직접 거두는 것보다 덜). 가만히 있어도 흑자면 돈이 줄지 않게
+  if (overflow > 0) {
+    // 오래 비우면 살림비처럼 12시간어치까지만 (사무실도 그만큼만 일한다)
+    const dep = Math.max(0, Math.min(overflow * Math.min(1, UPKEEP_MAX_HOURS / hours) * autoCollectRate(), vaultCap() - r.offering));
+    if (dep > 0) { r.offering += dep; bookIncome(null, 'autoCollect', dep); }
   }
   // 예비신자: 교리반 자리만큼 모인다
   addCatechumens(cateInflow() * hours);
@@ -931,11 +988,16 @@ function buildSpeed() { return Math.max(0.6, 1 + 0.15 * unitLevels('youth') + (G
 
 // 공사 종류별 비용 { offering, minutes }
 // 적응 기간: 성당 Lv3까지는 공사가 빠르고 싸며, 새 얼굴이 더 많이 찾아온다 (처음 게임에 익숙해지도록)
-const NEWBIE = { maxChurch: 3, time: 0.25, cost: 0.55, members: 3, offering: 1.7, upkeep: 0.5 };
+const NEWBIE = { maxChurch: 3, time: 0.25, cost: 0.55, members: 3, offering: 2.2, upkeep: 0.5 };
+// 첫 본당 (v0.92 사용자 요청): 적응 기간이 끝나도 첫 발령까지는 조금 더 빠르게. 게임을 익히는 동안 속도감 있게
+const FIRST_PARISH = { time: 0.5, cost: 0.8, offering: 1.8, members: 2 };  // v1.05: 첫 발령까지 1~2일이 되도록 더 빠르게
+function firstParish() { const p = Game.state.pastor; return !!p && !(p.career && p.career.length) && !newbie() ? FIRST_PARISH : null; }
 function newbie() { const p = Game.state.pastor; return !!p && !(p.career && p.career.length) && p.fixed.church <= NEWBIE.maxChurch; }
 
 function jobCost(kind, key, type, toLevel) {
   const c = baseJobCost(kind, key, type, toLevel);
+  const fp = c && firstParish();
+  if (fp) return { offering: Math.max(1, Math.round(c.offering * fp.cost)), minutes: c.minutes * fp.time };
   return c && newbie() ? { offering: Math.max(1, Math.round(c.offering * NEWBIE.cost)), minutes: c.minutes * NEWBIE.time } : c;
 }
 
@@ -1087,7 +1149,7 @@ function startMerge(key, from) {
   const c = mergeCost(key, from), now = Date.now();
   p.res.offering -= c.offering;
   book(null, 'building', c.offering);
-  p.jobs.push({ kind: 'merge', key, from, toLevel: c.level, workers: MERGE.workers, start: now, until: now + jobMinutes(c) * 60000 / timeScale() });
+  p.jobs.push({ kind: 'merge', key, from, toLevel: c.level, workers: MERGE.workers, start: now, until: now + jobMinutes(c) * 60000 / paceScale() });
   addLog(`🏢 ${siteName(key)}번과 ${containerIndex(from)}번을 합쳐 2층으로 올리기 시작`);
   return true;
 }
@@ -1137,7 +1199,7 @@ function startJob(kind, key, type, toLevel, room, slot) {
   }
   if (kind === 'group' && toLevel > 1) room = p.sites[key].rooms.findIndex(g => g && g.type === type);
   if (kind === 'gongso') p.sites[key] = p.sites[key] || { kind: 'gongso', level: 0 };
-  const job = { kind, key, room, type, toLevel, workers: jobWorkers(kind, key, toLevel), start: now, until: now + jobMinutes(cost) * 60000 / timeScale() };
+  const job = { kind, key, room, type, toLevel, workers: jobWorkers(kind, key, toLevel), start: now, until: now + jobMinutes(cost) * 60000 / paceScale() };
   // 가끔 솜씨 좋은 교우가 거들어 공사가 절반으로 줄어든다
   if (Math.random() < LUCK.carpenter) {
     job.until = now + (job.until - now) / 2;
@@ -1312,6 +1374,55 @@ function cateState() { const p = Game.state.pastor; return p.cate || (p.cate = {
 // 교리반 자리: 교리반 단체가 클수록 많이 받는다 (교리반이 없으면 신부님이 몇 명만)
 // 주교님 사목방문까지 남은 주일 수 (없으면 null). 0이면 이번 주일
 function bishopWeeks() { const p = Game.state.pastor; return p && p.bishop ? Math.max(0, p.bishop.week - p.week) : null; }
+// 연말 교구 시상식: 해마다 이웃 본당을 새로 정하고, 성탄 대축일 주일에 등수를 매긴다
+function awardYear(w) { return Math.floor((w === undefined ? Game.state.pastor.week : w) / 48) + 1; }
+function awardState() {
+  const p = Game.state.pastor, y = awardYear();
+  if (!p.award || p.award.year !== y) {
+    p.award = { year: y, base: { members: Math.floor(p.res.members), baptized: p.baptizedTotal || 0 }, k: AWARDS.neighbors.map(() => AWARDS.cats.map(() => 0.9 + Math.random() * 0.2)) };
+  }
+  return p.award;
+}
+// 이웃 본당 값: 우리 성당이 커지면 견주는 이웃도 그만큼 큰 본당
+function awardNeighbors() {
+  const a = awardState(), L = Game.state.pastor.fixed.church || 1;
+  return AWARDS.neighbors.map(([icon, name, f], j) => ({ icon, name, v: AWARDS.cats.map((c, i) => Math.min(c.unit === '명' ? 9999 : 99, Math.round(c.base(L) * f * ((a.k && a.k[j] && a.k[j][i]) || 1)))) }));
+}
+function awardMine() {
+  const p = Game.state.pastor, a = awardState(), gs = allGroups().filter(x => x.g.level);
+  const avg = gs.length ? gs.reduce((t, x) => t + (x.g.vital === undefined ? 60 : x.g.vital), 0) / gs.length : 0;
+  return [
+    Math.max(0, Math.floor(p.res.members) - a.base.members) + Math.max(0, (p.baptizedTotal || 0) - a.base.baptized),
+    Math.round(p.res.heart),
+    Math.round(avg * Math.min(1.15, 0.85 + gs.length * 0.03)),
+    Math.round(attendanceRate() * 100),
+  ];
+}
+// 부문마다 [우리 값, 등수(1~4), 1등 이웃 값]
+function awardStanding() {
+  const nb = awardNeighbors(), mine = awardMine();
+  return AWARDS.cats.map((c, i) => { const others = nb.map(n => n.v[i]); return { cat: c, mine: mine[i], rank: 1 + others.filter(v => v > mine[i]).length, top: Math.max(...others) }; });
+}
+function awardWeeksLeft() { const w = Game.state.pastor.week % 48; return w <= AWARDS.week ? AWARDS.week - w : 48 - w + AWARDS.week; }
+function holdAwards() {
+  const p = Game.state.pastor, st = awardStanding(), lines = [`🏆 연말 교구 사목 시상식 (${awardYear()}년째)`];
+  let firsts = 0;
+  for (const r of st) {
+    const pz = AWARDS.prize[r.rank - 1], got = [];
+    if (r.rank === 1) firsts++;
+    if (pz) { if (pz.gems) got.push(`💎${addGems(pz.gems)}`); if (pz.rep) got.push(`🌏+${fmt(addRes('reputation', pz.rep))}`); if (pz.trust) { p.trust = clamp((p.trust || 50) + pz.trust, 0, 100); got.push(`교구 신뢰 +${pz.trust}`); } }
+    lines.push(`${r.cat.icon} ${r.cat.name}: ${['🥇 1등', '🥈 2등', '🥉 3등', '4등'][r.rank - 1]} (${r.mine}${r.cat.unit})${got.length ? ' · ' + got.join(' · ') : ''}`);
+  }
+  if (firsts >= AWARDS.grand.firsts) {
+    const G = AWARDS.grand; addGems(G.gems); addRes('reputation', G.rep); p.trust = clamp((p.trust || 50) + G.trust, 0, 100);
+    lines.push(`✨ 올해의 본당 대상! 주교님이 직접 상패를 주셨어요 · 💎${G.gems} · 🌏+${G.rep} · 교구 신뢰 +${G.trust}`);
+  }
+  const worst = st.filter(r => r.rank === 4);
+  if (worst.length) lines.push(`🧑‍⚖️ 주교님: "${worst.map(r => r.cat.name.replace(' 상', '')).join('·')}은 내년에 조금 더 마음을 써 주세요. 신부님의 수고를 압니다."`);
+  p.awards = (p.awards || []).concat([{ year: awardYear(), ranks: st.map(r => r.rank), grand: firsts >= AWARDS.grand.firsts }]);
+  addLog(`🏆 교구 시상식: 1등 ${firsts}부문`);
+  return lines;
+}
 function cateCapacity() { return CATE.baseCap + Math.round(CATE.capPerLevel * unitLevels('catechumen')) + cateClasses().reduce((a, k) => a + k.cap, 0); }
 // 더 연 교리반 (CATE_CLASSES 앞에서부터)
 function cateClasses() { return CATE_CLASSES.slice(0, cateState().classes || 0); }
@@ -1341,7 +1452,7 @@ function promoMult() {
 function cateInflow() {
   const p = Game.state.pastor;
   const base = p.res.reputation * 0.01 + unitLevels('catechumen') * 1.5 * (sisterIn('catechumen') ? 1 + 0.5 * sisterEffFor('catechumen') : 1) + unitLevels('mission') + (hasPerk('mission3') ? 1 : 0);
-  return base * promoMult() * (0.7 + p.res.heart / 100 * 0.6) * (newbie() ? NEWBIE.members : 1) * parishMod('cate') * dirMod('cate') * (hasChair('missionDiv') ? 1.15 : 1);
+  return base * promoMult() * (0.7 + p.res.heart / 100 * 0.6) * (newbie() ? NEWBIE.members : firstParish() ? FIRST_PARISH.members : 1) * parishMod('cate') * dirMod('cate') * (hasChair('missionDiv') ? 1.15 : 1);
 }
 // 세례식에서 끝까지 교리를 마치는 비율
 function cateCompletion() {
@@ -2296,6 +2407,7 @@ function autoSundays(now) {
     }
     const r = doSunday({ auto: true, at });
     lines.push(`⛪ 주일미사가 정해진 시간에 드려졌어요 · 참례 ${r.attendees}명 · 봉헌 💰${r.collection}${r.away ? ` · ${r.away}` : ''}`);
+    lines.push(...r.award);
   }
   if (p.away && now >= p.away.until) lines.push(finishAway());
   return lines;
@@ -2725,6 +2837,7 @@ function doSunday(opts = {}) {
   if (p.week > 0 && (p.week + 1) % 4 === 0) { monthlyReport(); cateLines.push('📑 이번 달 단체 보고서가 도착했어요. 어디에 돈이 많이 들었는지 살펴보세요'); }
   if (sisters().some(s => (s.bond === undefined ? 60 : s.bond) >= 50)) p.convent = Math.min(100, conventRep() + 1);
   p.prep = 0;
+  const awardLines = p.week % 48 === AWARDS.week ? holdAwards() : (awardState(), []);
   p.week++;
   // 교구에서 사목방문 소식이 온다 (몇 주 앞서 주보에 알린다)
   if (!p.bishop && p.week >= BISHOP_VISIT.minWeek && p.week - (p.bishopLast === undefined ? -99 : p.bishopLast) >= BISHOP_VISIT.gap && Math.random() < BISHOP_VISIT.chance) {
@@ -2740,7 +2853,7 @@ function doSunday(opts = {}) {
   const pool = PASTOR_EVENTS.filter(e => !e.manual && (!e.cond || e.cond()));
   if (!PASTOR_EVENTS.some(e => e.manual && e.id === p.event)) p.event = Math.random() < 0.5 ? pick(pool).id : null;
   addLog(auto ? '⛪ 주일미사가 정해진 시간에 드려졌어요' : `⛪ 주일미사 강론: ${r.label}`);
-  return { auto, prepared, away: awayMsg, youthMass, weekLines, collectMult, sermon: r, attendees, rate, collection: Math.round(collection), newcomers: Math.round(newcomers), choir: unitLevels('choir') > 0, lit, altar: altarCare(), flower: flowerCare(), servers: unitLevels('server') > 0, organ: unitLevels('organ') > 0, lector: unitLevels('lector') > 0, shuttle: shuttleOn(), bishop: bv, lines: [`📅 ${lit.name}${massCount() > 1 ? ` · 주일미사 ${massCount()}대` : ''}`, ...bishopLines, ...(prepared ? [`✍️ 강론을 준비하고 직접 집전해 봉헌이 ${Math.round((collectMult - 1) * 100)}% 더 모였어요`] : []), ...(youthMass ? ['🎸 토요일 저녁 7시 30분 중고등부·청년 미사: 학생과 청년들이 전례 봉사를 했어요'] : []), ...weekLines, ...(awayMsg ? [awayMsg] : []), ...mb.lines, ...altarLines, ...(shuttleOn() ? [`🚐 관리장님이 셔틀버스로 어르신들을 모셔 왔어요 · 참례율 +${Math.round(SHUTTLE.attend * 100)}% · 기름값 💰${shuttleCost()}`] : []), `⛪ 미사 참례 ${attendees}명 / 신자 ${Math.floor(p.res.members)}명 (${Math.round(rate * 100)}%)`, `❤️ 신자들의 마음 ${fmt(h)}`, ...(newcomers >= 1 ? [`👥 강론 소문을 듣고 새 신자 ${Math.round(newcomers)}명이 찾아왔어요`] : []), `💰 주일 봉헌 ${Math.round(collection)}만 원`, ...cateLines, ...levy] };
+  return { auto, prepared, away: awayMsg, award: awardLines, youthMass, weekLines, collectMult, sermon: r, attendees, rate, collection: Math.round(collection), newcomers: Math.round(newcomers), choir: unitLevels('choir') > 0, lit, altar: altarCare(), flower: flowerCare(), servers: unitLevels('server') > 0, organ: unitLevels('organ') > 0, lector: unitLevels('lector') > 0, shuttle: shuttleOn(), bishop: bv, lines: [`📅 ${lit.name}${massCount() > 1 ? ` · 주일미사 ${massCount()}대` : ''}`, ...bishopLines, ...awardLines, ...(prepared ? [`✍️ 강론을 준비하고 직접 집전해 봉헌이 ${Math.round((collectMult - 1) * 100)}% 더 모였어요`] : []), ...(youthMass ? ['🎸 토요일 저녁 7시 30분 중고등부·청년 미사: 학생과 청년들이 전례 봉사를 했어요'] : []), ...weekLines, ...(awayMsg ? [awayMsg] : []), ...mb.lines, ...altarLines, ...(shuttleOn() ? [`🚐 관리장님이 셔틀버스로 어르신들을 모셔 왔어요 · 참례율 +${Math.round(SHUTTLE.attend * 100)}% · 기름값 💰${shuttleCost()}`] : []), `⛪ 미사 참례 ${attendees}명 / 신자 ${Math.floor(p.res.members)}명 (${Math.round(rate * 100)}%)`, `❤️ 신자들의 마음 ${fmt(h)}`, ...(newcomers >= 1 ? [`👥 강론 소문을 듣고 새 신자 ${Math.round(newcomers)}명이 찾아왔어요`] : []), `💰 주일 봉헌 ${Math.round(collection)}만 원`, ...cateLines, ...levy] };
 }
 
 // 교구 공납금: 한 주 동안 거둔 봉헌(헌금함·단체·주일 봉헌)의 일정 비율. 건축헌금은 빠진다.

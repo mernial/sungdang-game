@@ -122,7 +122,7 @@ function buildingShortName(b) {
 }
 
 // 안내 화살표: 가리킬 건물 위에서 통통 튀는 손가락과 글자
-function drawHintArrow(ctx, h) {
+function drawHintArrow(ctx, h, camX, camY) {
   let x, y0;
   if (h.at) { [x, y0] = iso(...h.at); y0 -= 10; }
   else {
@@ -131,17 +131,22 @@ function drawHintArrow(ctx, h) {
     [x, y0] = buildingTop(b);
   }
   const bob = Math.round(Math.sin(World.frameT * 6) * 3);
-  const k = Math.max(1, 2.4 / World.scale);
+  // v1.02 사용자 요청: 안내 표지가 작아 누르기 어려웠다 → 화면에서 늘 같은 크기로 크게 그리고, 표지 자체를 누를 수 있게
+  const k = Math.max(1, 2.4 / World.scale), u = 2.1 / World.scale;  // u: 화면에서 글자 약 19픽셀
   const y = Math.round(y0) - (h.bubble ? 44 * k + 6 : 8) + bob;
-  ctx.font = '14px sans-serif';
   ctx.textAlign = 'center';
+  ctx.font = `${Math.round(14 * u)}px sans-serif`;
   ctx.fillText('👇', x, y);
-  ctx.font = 'bold 8px sans-serif';
-  const w = Math.ceil(ctx.measureText(h.text).width) + 10;
+  ctx.font = `bold ${Math.round(9 * u)}px sans-serif`;
+  const w = Math.ceil(ctx.measureText(h.text).width) + 14 * u, bh = Math.round(15 * u), by = Math.round(y - 15 * u - bh);
   ctx.fillStyle = '#7b2d26';
-  ctx.fillRect(Math.round(x - w / 2), y - 26, w, 12);
+  if (typeof roundRect === 'function') { roundRect(ctx, Math.round(x - w / 2), by, w, bh, 4 * u); ctx.fill(); } else ctx.fillRect(Math.round(x - w / 2), by, w, bh);
   ctx.fillStyle = '#fff';
-  ctx.fillText(h.text, x, y - 17);
+  ctx.fillText(h.text, x, by + bh * 0.72);
+  if (camX !== undefined) {  // 표지와 손가락을 넉넉히 감싼 누르는 자리
+    const slop = 6 / World.scale;
+    World.hits.push({ x: x - w / 2 + camX - slop, y: by + camY - slop, w: w + slop * 2, h: (y - by) + 4 * u + slop * 2, hintId: h.id, hintAt: h.at });
+  }
 }
 
 // 장애물을 누르면 그 자리 위에 바로 뜨는 버튼 (obActionInfo는 ui.js가 정한다)
@@ -265,8 +270,16 @@ function pickAt(clientX, clientY) {
   const c = World.canvas, r = c.getBoundingClientRect();
   const px = (clientX - r.left) / World.scale, py = (clientY - r.top) / World.scale;
   // 나중에 그린 것(위에 있는 것)부터
-  const bubble = [...World.hits].reverse().find(h => px >= h.x && px <= h.x + h.w && py >= h.y && py <= h.y + h.h && (!h.poly || inPoly(h.poly, px, py)));
-  if (bubble) return bubble.interior ? { interiorRoom: bubble.interior } : bubble.sister ? { sisterTap: true, sisterName: bubble.sisterName } : bubble.obAct ? { obAct: bubble.id } : bubble.massGo ? { massGo: true } : bubble.rotPlace ? { rotPlace: true } : bubble.rotBtn ? { rotBtn: bubble.id } : bubble.up ? { upgrade: bubble.id } : { bubble: bubble.id };
+  // 손가락이면 누르는 자리를 조금 넉넉히 (말풍선·버튼 둘레 14화면픽셀)
+  const sl = (World.touchSlop || 4) / World.scale;
+  const inHit = (h, e) => px >= h.x - e && px <= h.x + h.w + e && py >= h.y - e && py <= h.y + h.h + e && (!h.poly || inPoly(h.poly, px, py));
+  const hs = [...World.hits].reverse(), bubble = hs.find(h => inHit(h, 0)) || hs.find(h => !h.poly && inHit(h, sl));
+  if (bubble && bubble.hintId) { const hb = World.buildings.find(q => q.id === bubble.hintId); if (hb) return { building: hb }; }
+  if (bubble && bubble.hintAt) {
+    const [hx, hy] = bubble.hintAt.map(Math.floor), m = World.map, ob = m.obstacleList && m.obstacleList().find(o => hx >= o.x && hx < o.x + o.w && hy >= o.y && hy < o.y + o.d);
+    if (ob) return { obstacle: ob };
+  }
+  if (bubble && !bubble.hintId && !bubble.hintAt) return bubble.interior ? { interiorRoom: bubble.interior } : bubble.sister ? { sisterTap: true, sisterName: bubble.sisterName } : bubble.obAct ? { obAct: bubble.id } : bubble.massGo ? { massGo: true } : bubble.meetGo ? { meetGo: bubble.meetGo } : bubble.rotPlace ? { rotPlace: true } : bubble.rotBtn ? { rotBtn: bubble.id } : bubble.up ? { upgrade: bubble.id } : { bubble: bubble.id };
   const sx = px - World.camOff[0], sy = py - World.camOff[1];
   for (const n of World.npcs) {
     if (!npcVisible(n)) continue;
@@ -734,6 +747,14 @@ function worldDraw() {
       const r = drawMassBubble(ctx, b, mc, World.frameT, k, st0 ? -36 * k : 0);
       World.hits.push({ x: r.x + camX - slop, y: r.y + camY - slop, w: r.w + slop * 2, h: r.h + slop * 2, id: b.id, massGo: true });
     }
+    // 단체 회의가 열렸거나 위원장이 초대하면 교리실 위에 알림 (v0.92, 누르면 그 방으로)
+    const mt = World.overview && b.rooms && !b.scaffold && Game.state.phase === 'pastor' && typeof meetingState === 'function'
+      ? (rs => rs.find(x => x[2] === 'open') || rs.find(x => x[2] === 'invite'))(b.rooms.map((g, i) => [g, i, g && g.level ? meetingState(b.id, i) : ''])) : null; // 빠지면 식는 회의를 먼저
+    if (mt) {
+      const k = Math.max(0.8, 1.9 / World.scale), slop = 6 / World.scale, inv = mt[2] === 'invite'; // 종보다 조금 작게 (이웃 교리실 알림과 덜 겹치게)
+      const r = drawMassBubble(ctx, b, { icon: UNITS[mt[0].type].icon, text: inv ? '초대' : '회의', ready: true }, World.frameT, k, st0 ? -44 * k : 0);
+      World.hits.push({ x: r.x + camX - slop, y: r.y + camY - slop, w: r.w + slop * 2, h: r.h + slop * 2, id: b.id, meetGo: [b.id, mt[1]] });
+    }
     const st = st0;
     if (st) {
       // 확대가 작아도 화면에서 손가락으로 누르기 좋은 크기로
@@ -837,7 +858,7 @@ function worldDraw() {
     const [x, y] = k.split(',').map(Number);
     poly(ctx, [iso(x, y), iso(x + 1, y), iso(x + 1, y + 1), iso(x, y + 1)], 'rgba(242,193,78,.25)', '#c79a2b');
   }
-  if (World.hint && !(World.obSel && World.hint.at)) drawHintArrow(ctx, World.hint);
+  if (World.hint && !(World.obSel && World.hint.at)) drawHintArrow(ctx, World.hint, camX, camY);
   if (World.overview && World.obSel) drawObAction(ctx, camX, camY);
   drawClearFx(ctx);
   // 거둔 뒤 떠오르는 글자
@@ -970,12 +991,15 @@ function worldInit(onInteract) {
     try { World.canvas.setPointerCapture(e.pointerId); } catch (err) { /* 무시 */ }
     ptrs.set(e.pointerId, [e.clientX, e.clientY]);
     if (ptrs.size === 1) {
-      drag = { x: e.clientX, y: e.clientY, cam: [...World.cam], pan: [...(World.inPan || [0, 0])], moved: 0 };
+      // v1.02 사용자 요청(터치가 잘 안 됨): 손가락은 마우스보다 흔들린다 → 손가락이면 14픽셀까지 움직여도 누르기로 친다
+      const touch = e.pointerType === 'touch' || e.pointerType === 'pen';
+      World.touchSlop = touch ? 14 : 4;
+      drag = { x: e.clientX, y: e.clientY, cam: [...World.cam], pan: [...(World.inPan || [0, 0])], moved: 0, tap: touch ? 14 : 6 };
       // 건물을 꾹 누르고 있으면(0.55초) 옮기기 (v0.90, 예전엔 ↻ 돌리기 표시)
       if (!World.placing && !World.pathMode && !(typeof insideView === 'function' && insideView())) {
         const d0 = drag, cx = e.clientX, cy = e.clientY;
         d0.lp = setTimeout(() => {
-          if (drag !== d0 || d0.moved > 6) return;
+          if (drag !== d0 || d0.moved > d0.tap) return;
           const hit = pickAt(cx, cy);
           // v0.90: 꾹 누르면 건물을 들어 올려 옮기기 (그대로 끌면 따라온다)
           if (hit && hit.building && World.onLongPress && World.onLongPress(hit.building.id)) {
@@ -984,7 +1008,7 @@ function worldInit(onInteract) {
             d0.longPressed = true;
             if (navigator.vibrate) try { navigator.vibrate(15); } catch (err) { /* 무시 */ }
           }
-        }, 550);
+        }, e.pointerType === 'touch' ? 700 : 550);
       }
       // 짓는 중: 반투명 건물 위를 누르고 끌면 건물이 따라온다
       const pl = World.placing;
@@ -1015,15 +1039,15 @@ function worldInit(onInteract) {
       if ((nx !== World.placing.x || ny !== World.placing.y) && World.onPlaceMove) World.onPlaceMove(nx, ny);
       return;
     }
-    if (drag.moved > 6 && typeof insideView === 'function' && insideView()) { World.inPan = [drag.pan[0] + dx / World.scale, drag.pan[1] + dy / World.scale]; return; }
-    if (drag.moved > 6) { World.cam = [drag.cam[0] - dx / World.scale, drag.cam[1] - dy / World.scale]; clampCam(); }
+    if (drag.moved > drag.tap && typeof insideView === 'function' && insideView()) { World.inPan = [drag.pan[0] + dx / World.scale, drag.pan[1] + dy / World.scale]; return; }
+    if (drag.moved > drag.tap) { World.cam = [drag.cam[0] - dx / World.scale, drag.cam[1] - dy / World.scale]; clampCam(); }
   });
   const endPtr = e => {
     if (!World.overview || !ptrs.has(e.pointerId)) return;
     ptrs.delete(e.pointerId);
     if (drag && drag.lp) clearTimeout(drag.lp);
     if (drag && drag.longPressed) { drag = null; return; }
-    if (drag && drag.moved <= 6 && e.type === 'pointerup' && !World.isPaused()) {
+    if (drag && drag.moved <= drag.tap && e.type === 'pointerup' && !World.isPaused()) {
       if (World.pathMode) {
         // 길 놓기: 누른 칸에 길을 놓거나 걷는다
         const [tx, ty] = tileAt(e.clientX, e.clientY);

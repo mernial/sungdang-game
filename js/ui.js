@@ -23,7 +23,8 @@ function glossarize(text) {
   return out;
 }
 
-function toast(msg) {
+function toast(msg, silent) {
+  if (!silent && typeof Sound !== 'undefined') Sound.sfxForText(msg);
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
@@ -45,6 +46,7 @@ function nextModal() {
   if (!opts) { UI.modalOpen = false; root.innerHTML = ''; return; }
   UI.modalOpen = true;
   World.keys = {};
+  if (typeof Sound !== 'undefined') Sound.sfx('open');
   const buttons = [...(opts.buttons || (opts.options ? [{ label: '닫기', cls: 'ghost' }] : [{ label: '확인' }]))];
   if (UI.rotFor && !opts.noRotate) { const id = UI.rotFor; UI.rotFor = null; buttons.unshift({ label: '↻ 돌리기', cls: 'ghost', onClick: () => { const m = rotateThing(id); if (m) toast(m); } }); }
   // 바탕을 누르거나 ✕로 닫을 수 있는 창: 할 일 없이 닫기만 하는 단추가 있을 때 (꼭 골라야 하는 창은 닫히지 않는다)
@@ -357,7 +359,7 @@ const MENUS = {
 // ---------- 주임 신부 메뉴 ----------
 
 function costText(c, up) {
-  return `💰${c.offering} · ⏱️${fmtDur(jobMinutes(c) * 60 / timeScale())}${up ? ` · 살림 +${up.toFixed(1)}/시간` : ''}`;
+  return `💰${c.offering} · ⏱️${fmtDur(jobMinutes(c) * 60 / paceScale())}${up ? ` · 살림 +${up.toFixed(1)}/시간` : ''}`;
 }
 
 function needLine(n) { return `<div class="q-item ${n.ok ? 'done' : ''}">${n.ok ? '✅' : '⬜'} ${n.label} ${n.have}/${n.want}</div>`; }
@@ -492,12 +494,21 @@ function openBlessings() {
 }
 
 // 주보: 피정·휴가 공지, 교구 연수 일정 (v0.75)
+// 주보: 연말 교구 시상식까지 남은 주일과 지금 등수
+function awardBulletinHtml() {
+  const st = awardStanding(), w = awardWeeksLeft(), last = (Game.state.pastor.awards || []).slice(-1)[0];
+  const medal = r => ['🥇', '🥈', '🥉', '4등'][r - 1];
+  return `<p class="small">🏆 <b>연말 교구 사목 시상식</b>: ${w === 0 ? '이번 주일(성탄 대축일)' : `앞으로 ${w + 1}번째 주일(성탄 대축일)`}. 이웃 본당 ${AWARDS.neighbors.map(n => n[0] + n[1]).join(' · ')}과 견줘요. 1등 💎${AWARDS.prize[0].gems}·평판·교구 신뢰, 세 부문 1등이면 올해의 본당 대상.</p>
+    <div class="small">${st.map(r => `<div>${r.cat.icon} ${r.cat.name} <b>${medal(r.rank)}</b> · 우리 ${r.mine}${r.cat.unit} / 1등 이웃 ${r.top}${r.cat.unit} <span class="muted">(${r.cat.hint})</span></div>`).join('')}</div>
+    ${last ? `<p class="muted">지난 시상식(${last.year}년째): ${last.ranks.map((r, i) => AWARDS.cats[i].icon + medal(r)).join(' ')}${last.grand ? ' · ✨ 올해의 본당' : ''}</p>` : ''}`;
+}
 function openBulletin() {
   const p = Game.state.pastor, plan = p.awayPlan;
   modal({
     title: '📰 주보',
     html: `<p class="small">${isAway() ? `${awayDef().icon} 지금 신부님은 <b>${awayDef().name}</b> 중이에요 (본당에 미사가 없어요)` : plan ? `📌 다음 주일미사 뒤 <b>${AWAY[plan.kind].name}</b>(${AWAY[plan.kind].days}일)를 떠난다고 공지했어요` : '피정과 휴가는 주보로 미리 알리고 다음 주일미사 뒤에 떠나요. 신부님이 없는 동안 본당에 미사가 없어요.'}</p>
       ${bishopWeeks() !== null ? `<p class="small">🧑‍⚖️ <b>주교님 사목방문</b>: ${bishopWeeks() === 0 ? '이번 주일' : `앞으로 ${bishopWeeks() + 1}번째 주일`}에 오셔서 미사를 주례하세요. 교우들이 많이 나와 봉헌이 늘어요. 신부님이 직접 맞이하면 교구 신뢰가 더 올라요.</p>` : ''}
+      ${awardBulletinHtml()}
       <p class="muted">🎓 ${nextTrainingText()} · 상반기(4월)·하반기(10월) 교구 연수는 사흘 동안 저절로 다녀와요</p>`,
     options: [
       ...['retreat', 'vacation'].map(k => { const a = AWAY[k], b = awayPlanBlocker(k); return { tile: true, label: `${a.icon} ${a.name} 공지`, tileSub: `${a.days}일 · 올해 ${awayUsed(k)}/${a.perYear}`, sub: b || a.desc, disabled: !!b, onClick: () => { const m = planAway(k); if (m) { toast(m); save(); } } }; }),
@@ -808,7 +819,7 @@ function openMergeMenu(key) {
     html: `<p class="small">고른 교리실의 단체들이 <b>${siteName(key)}</b>의 2층으로 옮겨 오고, 고른 교리실 자리는 빈터가 돼요.</p>
       <p class="muted">합친 건물의 레벨은 둘 중 낮은 쪽 · 살림은 두 채의 80% · 앞으로 고치는 비용은 1.6배 · 👷 일꾼 ${MERGE.workers}명</p>`,
     options: list.map(k => { const cost = mergeCost(key, k), block = mergeBlocker(key, k); return {
-      label: `🏫 ${siteName(k)} · Lv${p.sites[k].level} <span class="cost">💰${cost.offering} · ⏱️${fmtDur(jobMinutes(cost) * 60 / timeScale())}</span>`,
+      label: `🏫 ${siteName(k)} · Lv${p.sites[k].level} <span class="cost">💰${cost.offering} · ⏱️${fmtDur(jobMinutes(cost) * 60 / paceScale())}</span>`,
       sub: `${groupsOf(k)} → 2층으로 · 합친 뒤 Lv${cost.level}${block ? ` · <b>${block}</b>` : ''}`, disabled: !!block,
       onClick: () => { if (startMerge(key, k)) { toast(`🏢 교리실 두 채를 합쳐 2층으로 올리기 시작했어요`); save(); syncWorldLayout(); } } }; }),
   });
@@ -897,7 +908,7 @@ function openRoomMenu(key, room) {
         onClick: () => setTimeout(() => chooseSlot(g.type, slot => { setGroupSlot(key, room, slot); toast(`🕘 ${def.name} 회의를 ${josa(MEETING_SLOTS[slot].name, '으로', '로')} 옮겼어요`); }, groupSlot(g)), 0),
       }]),
       ...(working ? jobOptions(cj).map(o => ({ ...o, tile: true })) : [{
-        tile: true, label: `⬆️ Lv${to}로 키우기`, tileSub: block ? `🔒 ${block}` : `💰${jobCost('group', key, g.type, to).offering} · ⏱️${fmtDur(jobMinutes(jobCost('group', key, g.type, to)) * 60 / timeScale())}`,
+        tile: true, label: `⬆️ Lv${to}로 키우기`, tileSub: block ? `🔒 ${block}` : `💰${jobCost('group', key, g.type, to).offering} · ⏱️${fmtDur(jobMinutes(jobCost('group', key, g.type, to)) * 60 / paceScale())}`,
         sub: compareLine('group', key, g.type, to).replace(/<[^>]+>/g, ''),
         disabled: !!block,
         onClick: () => { if (startJob('group', key, g.type, to)) toast(`${def.icon} ${def.name} Lv${to} 준비를 시작했어요`); },
@@ -962,7 +973,7 @@ function openCouncilMenu() {
       { tile: true, label: '🏛️ 조직도', tileSub: `위원장 ${chairsCount()}명${ready ? ` · 선임 가능 ${ready}` : ''}`, onClick: () => setTimeout(openOrgModal, 0) },
       { tile: true, label: '🌳 테크 트리', tileSub: '단체가 열리는 조건', onClick: () => setTimeout(openTechTree, 0) },
       { tile: true, label: '📊 현황과 목표', onClick: () => setTimeout(openCouncil, 0) },
-      { tile: true, label: '📜 본당 성적표', tileSub: p.transfer ? (transferReady() ? '인사발령 공문이 왔어요' : `발령까지 ${transferWeeksLeft()}주일`) : `성당 Lv${TRANSFER.church}이 되면 인사발령`, onClick: () => setTimeout(openTransferModal, 0) },
+      { tile: true, label: '📜 본당 성적표', tileSub: p.transfer ? (transferReady() ? '인사발령 공문이 왔어요' : `발령까지 ${transferWeeksLeft()}주일`) : transferNeedLabel(), onClick: () => setTimeout(openTransferModal, 0) },
       { tile: true, label: '📅 사목 방향', tileSub: direction() ? `${direction().icon} ${direction().name}` : '이번 달 정하기', onClick: () => setTimeout(openDirectionModal, 0) },
       { tile: true, label: '💼 지출 기준', tileSub: '행사 지원금', onClick: () => setTimeout(openPolicyModal, 0) },
       { tile: true, label: '💰 단체별 지원', tileSub: '활동비 많이·보통·적게', onClick: () => setTimeout(openBudgetModal, 0) },
@@ -1086,7 +1097,7 @@ function pastorStatusHtml() {
     <p class="small">🏘️ 이웃 동네 종교 현황은 지도 아래 <b>마을회관</b>을 누르면 볼 수 있어요.</p>
     ${unlockedPerks().length ? `<div class="perks"><b>✨ 열린 단체 능력 ${unlockedPerks().length}개</b>${unlockedPerks().map(k => `<div class="on">${k.text}</div>`).join('')}</div>` : ''}
     <div class="stat-row"><span>📦</span><span>교리실</span><span class="muted small">빈 방 ${roomsFree()}개</span><span class="v">${containerCount()}동</span></div>
-    <p class="muted">신자들의 마음이 클수록 봉헌금·건축헌금이 많이 들어오고 새 신자도 잘 와요. 봉헌과 새 얼굴은 헌금함과 단체 건물에 쌓여요. 말풍선을 눌러 거두세요. 봉헌금은 금고(본당 사무실) 한도까지만 가질 수 있어요. 건물과 단체가 늘수록 살림(전기·난방·활동비)도 늘고, 주일마다 교구 공납금을 내요. 봉헌금이 바닥나면 단체 활력이 떨어져요. 마음은 강론, 가정 방문, 단체 모임으로 얻어요. 새 신자는 평판과 입소문, 그리고 신부님의 강론력·친화력이 높을수록 많이 찾아와요. 화살표는 지금 단체들이 이끄는 방향이에요.</p>`;
+    <p class="muted">신자들의 마음이 클수록 봉헌금·건축헌금이 많이 들어오고 새 신자도 잘 와요. 봉헌과 새 얼굴은 헌금함과 단체 건물에 쌓여요. 말풍선을 눌러 거두세요. 말풍선이 가득 차면 넘치는 봉헌은 사무실 직원이 일부(사무실 Lv1 65% ~ Lv5 85%)만 대신 거둬 금고에 넣어요. 봉헌금은 금고(본당 사무실) 한도까지만 가질 수 있어요. 건물과 단체가 늘수록 살림(전기·난방·활동비)도 늘고, 주일마다 교구 공납금을 내요. 봉헌금이 바닥나면 단체 활력이 떨어져요. 마음은 강론, 가정 방문, 단체 모임으로 얻어요. 새 신자는 평판과 입소문, 그리고 신부님의 강론력·친화력이 높을수록 많이 찾아와요. 화살표는 지금 단체들이 이끄는 방향이에요.</p>`;
 }
 
 function openCouncil() {
@@ -1205,7 +1216,28 @@ const MASS_TIERS = [null,
   { rows: 6, windows: 6, glass: true, carpet: true, lamp: true, organ: true, arch: true, wall: '#f7f3ea', floor: '#d6c8b1', name: '빛나는 성당' },
 ];
 
+// 그린 미사 장면 (v1.06): 성당 단계마다 바탕 + 단체가 있으면 겹치는 조각 (tools/comfy-mass.py와 같은 자리)
+const MASS_IMG_W = 1216, MASS_IMG_H = 832;
+let MASS_META = null; // 조각 자리 (그림 좌표 0~1): tools/comfy-mass.py가 적은 assets/story/mass-meta.json
+function loadMassLayers(tier, info) {
+  const load = src => new Promise(res => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = src; });
+  const meta = MASS_META ? Promise.resolve(MASS_META) : fetch('assets/story/mass-meta.json?v=1').then(r => r.json()).then(m => (MASS_META = m)).catch(() => ({}));
+  // 제대회 → 깔끔한 제대, 헌화회 → 제대 꽃, 복사단(또는 제대회 Lv5) → 복사, 성가대 → 성가대원
+  const want = ['altar', 'flower', 'servers', 'choir'].filter(k => k === 'altar' ? (info.altar || 0) >= 1 : k === 'flower' ? (info.flower || 0) >= 1 : k === 'servers' ? ((info.altar || 0) >= 5 || info.servers) : !!info.choir);
+  return meta.then(m => Promise.all([load(STORY_IMG(`mass-t${tier}`)), ...want.map(k => m[`t${tier}-${k}`] ? load(STORY_IMG(`mass-t${tier}-${k}`)) : null)])
+    .then(([base, ...parts]) => base ? { base, parts: parts.map((img, i) => img && { img, box: m[`t${tier}-${want[i]}`] }).filter(Boolean) } : null));
+}
+
 function playMassScene(info, onDone) {
+  const tierNo = (CHURCH_LEVELS[Game.state.pastor.fixed.church] || {}).tier || 1;
+  let started = false;
+  const go = painted => { if (started) return; started = true; playMassSceneInner(info, onDone, painted); };
+  Sound.sfx('bell');
+  loadMassLayers(tierNo, info).then(go);
+  setTimeout(() => go(null), 2500);
+}
+
+function playMassSceneInner(info, onDone, painted) {
   const W = 240, H = 150;
   const tier = MASS_TIERS[(CHURCH_LEVELS[Game.state.pastor.fixed.church] || {}).tier || 1];
   const rowGap = tier.rows >= 6 ? 10 : tier.rows <= 3 ? 15 : 12, SEATS = tier.rows * 12;
@@ -1217,8 +1249,19 @@ function playMassScene(info, onDone) {
   const cv = el.querySelector('canvas'), ctx = cv.getContext('2d'), cap = el.querySelector('.mass-cap');
   // 미사 장면 그림(assets/sprites/mass-scene.png, 신부님과 교우들이 있는 성전 정면)이 있으면 그 그림을 배경으로 쓰고,
   // 코드로 그린 성당·교우·신부님 대신 그 위에 반응(하트·봉헌·빛)만 얹는다. 그림이 고우니 캔버스를 4배로
-  const massBg = getSprite('mass-scene');
-  if (massBg) { cv.width = W * 4; cv.height = H * 4; ctx.scale(4, 4); }
+  const massBg = painted || getSprite('mass-scene');
+  if (massBg) { cv.width = W * 4; cv.height = H * 4; ctx.scale(4, 4); el.classList.add('painted'); }
+  // 그린 장면은 가로세로 비가 달라 위아래를 조금 잘라 꽉 채운다. 그림 좌표(0~1) → 화면 좌표
+  const srcH = MASS_IMG_W * H / W, srcY = (MASS_IMG_H - srcH) / 2;
+  const toY = yn => (yn * MASS_IMG_H - srcY) / srcH * H;
+  const drawPainted = t => {
+    const z = 1 + 0.035 * Math.min(1, t / 7.4); // 천천히 다가간다
+    ctx.save(); ctx.translate(W / 2, H * 0.45); ctx.scale(z, z); ctx.translate(-W / 2, -H * 0.45);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(painted.base, 0, srcY, MASS_IMG_W, srcH, 0, 0, W, H);
+    for (const p of painted.parts) ctx.drawImage(p.img, p.box[0] * W, toY(p.box[1]), (p.box[2] - p.box[0]) * W, toY(p.box[3]) - toY(p.box[1]));
+    ctx.restore(); ctx.imageSmoothingEnabled = false;
+  };
   ctx.imageSmoothingEnabled = false;
   const filled = Math.max(3, Math.min(SEATS, Math.round(SEATS * info.rate)));
   const looks = ['p1', 'p2', 'p3', 'p4', 'p5', 'kid', 'youth'];
@@ -1353,7 +1396,8 @@ function playMassScene(info, onDone) {
     if (done) return;
     if (t0 === null) t0 = ts;
     const t = (ts - t0) / 1000;
-    if (massBg) { ctx.imageSmoothingEnabled = true; ctx.drawImage(massBg, 0, 0, W, H); ctx.imageSmoothingEnabled = false; ctx.fillStyle = `rgba(255,240,200,${0.05 + 0.04 * Math.sin(t * 2)})`; ctx.fillRect(0, 0, W, H); }
+    if (painted) { drawPainted(t); ctx.fillStyle = `rgba(255,240,200,${0.04 + 0.03 * Math.sin(t * 2)})`; ctx.fillRect(0, 0, W, H); }
+    else if (massBg) { ctx.imageSmoothingEnabled = true; ctx.drawImage(massBg, 0, 0, W, H); ctx.imageSmoothingEnabled = false; ctx.fillStyle = `rgba(255,240,200,${0.05 + 0.04 * Math.sin(t * 2)})`; ctx.fillRect(0, 0, W, H); }
     else drawRoom(t);
     // 교우들: 입당하는 동안 앞줄부터 하나씩 앉는다
     const shown = t < T.enter ? Math.floor(people.length * t / T.enter) : people.length;
@@ -1709,7 +1753,7 @@ function placeInfoHtml() {
   if (pl.move) { const b = World.buildings.find(q => q.id === pl.move); return `<div class="place-info" id="place-info">${rotBtn}<b>🚚 ${b ? buildingShortName(b) : ''} 옮기기</b> <span class="muted">끌어서 자리 · 무료</span><br><span class="${pl.ok ? 'ok' : 'no'}">${pl.ok ? '✔ 여기로 옮길 수 있어요' : `✖ ${pl.reason}`}</span></div>`; }
   if (DECOR[pl.kind]) return `<div class="place-info" id="place-info">${rotBtn}<b>${DECOR[pl.kind].icon} ${DECOR[pl.kind].name}</b> <span class="muted">💰${decorCost(pl.kind)} · 바로</span><br><span class="${pl.ok ? 'ok' : 'no'}">${pl.ok ? '여기에 놓을 수 있어요' : pl.reason}</span></div>`;
   const c = jobCost(pl.kind, 'new', null, 1);
-  return `<div class="place-info" id="place-info">${rotBtn}<b>${PLACE_NAME[pl.kind]}</b> <span class="muted">💰${c.offering} · ⏱️${fmtDur(jobMinutes(c) * 60 / timeScale())}</span><br><span class="${pl.ok ? 'ok' : 'no'}">${pl.ok ? '✔ 여기에 지을 수 있어요' : `✖ ${pl.reason}`}</span></div>`;
+  return `<div class="place-info" id="place-info">${rotBtn}<b>${PLACE_NAME[pl.kind]}</b> <span class="muted">💰${c.offering} · ⏱️${fmtDur(jobMinutes(c) * 60 / paceScale())}</span><br><span class="${pl.ok ? 'ok' : 'no'}">${pl.ok ? '✔ 여기에 지을 수 있어요' : `✖ ${pl.reason}`}</span></div>`;
 }
 
 // 놓는 중 방향 돌리기: 단추나 R 키
@@ -1866,6 +1910,7 @@ function onWorldTap(hit) {
   if (!hit) return;
   if (hit.lot) { openLotMenu(hit.lot.id); return; }
   if (hit.massGo) { goToMass(); return; }
+  if (hit.meetGo) { openRoomMenu(hit.meetGo[0], hit.meetGo[1]); return; }
   if (hit.obstacle && hit.obstacle.type !== 'house') { World.obSel = World.obSel && World.obSel.id === hit.obstacle.id ? null : { id: hit.obstacle.id }; return; }
   if (hit.obstacle) openObstacleMenu(hit.obstacle);
   else if (hit.upgrade) openUpgradeConfirm(hit.upgrade);
@@ -2156,6 +2201,8 @@ function churchGoalGoto(to) {
 
 // 적응 기간 안내
 function newbieLine() {
+  const fp = firstParish();
+  if (fp) return `<div class="q-item muted">🌱 첫 본당 (첫 발령까지) · 공사 ${Math.round(10 / fp.time) / 10}배 빠르게 · 비용 ${Math.round((1 - fp.cost) * 100)}% 할인 · 봉헌 ${fp.offering}배 · 새 얼굴 ${fp.members}배</div>`;
   if (!newbie()) return '';
   return `<div class="q-item muted">🌱 적응 기간 (성당 Lv${NEWBIE.maxChurch}까지) · 공사 ${Math.round(1 / NEWBIE.time)}배 빠르게 · 비용 ${Math.round((1 - NEWBIE.cost) * 100)}% 할인 · 새 얼굴 ${NEWBIE.members}배</div>`;
 }
@@ -2166,7 +2213,7 @@ function collectLine() {
   if (!list.length) return '';
   const o = Math.floor(list.reduce((a, x) => a + x.offering, 0)), m = Math.floor(list.reduce((a, x) => a + x.members, 0));
   const full = list.some(x => x.full);
-  return `<div class="q-item hl" data-collect="1">🧺 거둘 것 ${[o ? `💰${o}` : '', m ? `👥${m}` : ''].filter(Boolean).join(' ')}${full ? ' · 가득 찬 곳이 있어요' : ''} · 모두 거두기</div>`;
+  return `<div class="q-item hl" data-collect="1">🧺 거둘 것 ${[o ? `💰${o}` : '', m ? `👥${m}` : ''].filter(Boolean).join(' ')}${full ? ` · 가득 찬 곳은 사무실이 ${Math.round(autoCollectRate() * 100)}%만 대신 거둬요` : ''} · 모두 거두기</div>`;
 }
 
 function jobsLines() {
@@ -2251,7 +2298,6 @@ function questTasks() {
   if (p.hiring && p.hiring.applicants.length) out.push({ icon: '📨', text: `지원자 ${p.hiring.applicants.length}명`, attr: ' data-hire="1"', hl: true, pri: 8 });
   if (sisters().some(sis => !(sis.scope || []).length)) out.push({ icon: '👩‍🦳', text: '수녀님 활동 범위 정하기', attr: ' data-sister="1"', hl: true, pri: 7 });
   if (p.week > 0 && !direction()) out.push({ icon: '📅', text: '이번 달 사목 방향', attr: ' data-direction="1"', hl: true, pri: 7 });
-  { const bl = blessReqs(); if (bl.length) { const b = BLESSINGS.find(x => x.id === bl[0].kind); out.push({ icon: b.icon, text: `${b.name} 요청${bl.length > 1 ? ` 외 ${bl.length - 1}건` : ` · ${bl[0].who}`}`, attr: ' data-bless="1"', hl: !!bl.find(r => BLESSINGS.find(x => x.id === r.kind).urgent), pri: 8 }); } }
   if (isAway()) out.push({ icon: awayDef().icon, text: `${awayDef().name} 중 · ${fmtDur(Math.ceil((p.away.until - Date.now()) / 1000))} 뒤 돌아와요`, attr: go('b:office'), pri: 9 });
   else { const tl = todayLits(); if (tl.length) out.push({ icon: '🗓️', text: `${WEEK_DAYS[weekDay()]}요일 · ${tl[0].time} ${tl[0].name.replace(/^\S+요일 /, '')}${tl.length > 1 ? ` 외 ${tl.length - 1}` : ''}`, attr: go('b:church'), hl: true, pri: 7 }); }
   if (p.transfer) out.push(transferReady() ? { icon: '📜', text: '인사발령 공문', attr: ' data-transfer="1"', hl: true, pri: 10 } : { icon: '📜', text: `인사발령까지 ${transferWeeksLeft()}주일`, attr: ' data-transfer="1"', pri: 4 });
@@ -2273,9 +2319,10 @@ function questPillsHtml() {
   // 목표: 성당 다음 레벨 조건 중 채운 수를 막대로
   const to = p.fixed.church + 1, c = CHURCH_LEVELS[to];
   let goal = '';
-  if (c && !c.locked) {
+  if (questOn() || blessReqs().length) goal = questCardHtml();
+  if (!questOn() && c && !c.locked) {
     const needs = churchNeeds(to), ok = needs.filter(n => n.ok).length;
-    goal = `<button class="pill goal ${ok === needs.length ? 'hl' : ''}" data-qgoal="1"><span>🎯</span>성당 Lv${to} <span class="gbar"><span style="width:${ok / needs.length * 100}%"></span></span> ${ok}/${needs.length}</button>`;
+    goal += `<button class="pill goal ${ok === needs.length ? 'hl' : ''}" data-qgoal="1"><span>🎯</span>성당 Lv${to} <span class="gbar"><span style="width:${ok / needs.length * 100}%"></span></span> ${ok}/${needs.length}</button>`;
   }
   return `<div class="quest-pills" id="quest">${goal}${shown.map(pill).join('')}${more > 0 ? `<button class="pill more" data-qmore="1">+${more}</button>` : ''}</div>`;
 }
@@ -2294,6 +2341,95 @@ function openGoalModal() {
   });
 }
 
+// ---------- 첫 본당 퀘스트 (v1.05) ----------
+function questGo(spec) {
+  setTimeout(() => {
+    if (spec === 'clear') { toast('🌿 본당 땅의 잡초·돌·나무를 눌러 치워요 (산 땅에서만)'); return; }
+    if (spec === 'build') { openBuildCatalog(); return; }
+    if (spec === 'lots') { openLotList(); return; }
+    if (spec === 'fence') { openFenceMenu(); return; }
+    if (spec === 'decor') { openDecorMenu(); return; }
+    if (spec === 'path') { startPathMode(); return; }
+    if (spec === 'cate') { openCateMenu(); return; }
+    if (spec === 'elder') { questGoto('npc:elder'); return; }
+    questGoto(spec);
+  }, 0);
+}
+function onQuestTap(id) {
+  const d = questDef(id);
+  if (!d) return;
+  if (questProgress(d).ok) { const m = claimQuest(id); if (m) { save(); refreshPastorHud(); showQuestDone(d); } return; }
+  questGo(d.go);
+}
+const rewardChips = r => [r.offering ? `<span class="rw gold">💰 ${r.offering}</span>` : '', r.gems ? `<span class="rw gem">💎 ${r.gems}</span>` : '', r.heart ? `<span class="rw heart">❤️ +${r.heart}</span>` : ''].join('');
+// 왼쪽 퀘스트 카드: 걸린 퀘스트 수만 머리에, 아래로 퀘스트 이름 (다 채우면 [받기])
+function questCardHtml() {
+  const act = questActive();
+  const rows = act.map(d => { const ok = questProgress(d).ok; return `<button class="qc-row${ok ? ' ok' : ''}" data-quest="${d.id}"><span class="qc-ic">${ok ? '🎁' : d.icon}</span><span class="qc-tx">${d.name}</span>${ok ? '<span class="qc-get">받기</span>' : '<span class="qc-go">›</span>'}</button>`; }).join('');
+  const bl = blessReqs().map((r, i) => { const b = BLESSINGS.find(x => x.id === r.kind); return `<button class="qc-row bless" data-bless-i="${i}"><span class="qc-ic">${b.icon}</span><span class="qc-tx">${b.name}<small>${esc(r.who)}${b.urgent ? ' · 급해요' : ''}</small></span><span class="qc-go">›</span></button>`; }).join('');
+  return `<div class="qcard"><button class="qc-head" data-qlist="1"><span class="qc-scroll">📜</span>퀘스트<span class="qc-n">${act.length + blessReqs().length}</span></button>${rows}${bl}${rows || bl ? '' : `<div class="qc-wait">새 퀘스트를 기다리는 중…</div>`}</div>`;
+}
+function openQuestModal() {
+  const act = questActive(), wait = questNextSec(), p = Game.state.pastor;
+  const card = d => { const pr = questProgress(d); return `<button class="qm-card${pr.ok ? ' ok' : ''}" data-qrow="${d.id}">
+      <span class="qm-ic">${d.icon}</span>
+      <span class="qm-body"><b>${d.name}</b>${QUEST_FROM[d.id] ? `<em class="qm-from">${QUEST_WHO[QUEST_FROM[d.id][0]].name}의 부탁</em>` : ''}<small>${d.desc}</small>
+        <span class="qm-bar"><i style="width:${pr.have / pr.want * 100}%"></i></span>
+        <span class="qm-rw">${rewardChips(d.reward)}</span></span>
+      <span class="qm-act">${pr.ok ? '받기' : '가기'}</span></button>`; };
+  modal({
+    title: `📜 퀘스트 <span class="qc-n">${act.length}</span>`,
+    html: `<div class="qm-list">${act.map(card).join('') || '<p class="muted">지금은 걸린 퀘스트가 없어요.</p>'}</div>
+      <p class="qm-foot">${p.transfer ? `📜 인사발령까지 ${transferWeeksLeft()}주일` : questState().next < FIRST_QUESTS.length ? `⏳ 다음 퀘스트 ${wait ? fmtDur(wait) + ' 뒤' : '곧'}` : '📜 남은 퀘스트를 마치면 인사발령 공문이 와요'}</p>`,
+    buttons: [{ label: '닫기', cls: 'ghost' }],
+  });
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('#modal-root [data-qrow]');
+  if (b) closeModalThen(() => onQuestTap(b.dataset.qrow));
+});
+// 새 퀘스트: 청한 사람의 그림과 말이 함께 뜬다
+function showQuestRequest(d) {
+  const f = QUEST_FROM[d.id], who = f ? QUEST_WHO[f[0]] : QUEST_WHO.council;
+  const el = document.createElement('div');
+  el.className = 'qdone-bg';
+  el.innerHTML = `<div class="qdone qreq"><div class="qr-img" style="background-image:url('${STORY_IMG(who.img)}')"><span class="qr-who">${who.name}</span></div>
+    <p class="qr-line">“${f ? f[1] : d.desc}”</p>
+    <div class="qr-q"><span class="qc-ic">${d.icon}</span><b>${d.name}</b></div>
+    <div class="qd-rw">${rewardChips(d.reward)}</div>
+    <div class="qr-btns"><button class="qd-btn ghost" data-qr="later">나중에</button><button class="qd-btn" data-qr="go">해 볼게요</button></div></div>`;
+  el.onclick = e => {
+    const b = e.target.closest('[data-qr]');
+    if (e.target === el || b) { Sound.hush(); el.remove(); if (b && b.dataset.qr === 'go') onQuestTap(d.id); }
+  };
+  document.body.appendChild(el);
+  Sound.sfx('quest');
+  setTimeout(() => Sound.speak(f ? f[1] : d.desc, f ? f[0] : 'council'), 600);
+}
+const BLESS_IMG = { car: 'bless-car', shop: 'bless-shop', anoint: 'bless-anoint', hands: 'bless-hands', items: 'bless-items' };
+// 축복 요청: 그 장면 그림 위에 사연, 아래에 다녀올지 고른다
+function openBlessScene(i) {
+  const r = blessReqs()[i];
+  if (!r) return;
+  const b = BLESSINGS.find(x => x.id === r.kind), blk = blessBlocker(i), left = Math.max(0, Math.ceil((r.until - Date.now()) / 1000));
+  Sound.sfx('bless'); setTimeout(() => Sound.speak(r.why, 'faithful'), 500);
+  vnOverlay([{ img: BLESS_IMG[r.kind] || 'bless-items', chap: `${b.icon} ${b.name} 요청`, who: esc(r.who), lines: [r.why, `<span class="vn-who">${fmtDur(left)} 안에${b.urgent ? ' · 급해요' : ''} · 다녀오면 가족이 감사 봉헌을 해요</span>`],
+    choices: [
+      { label: `가서 축복한다 ⚡${b.energy}`, sub: blk || '', disabled: !!blk, onClick: () => { const m = doBlessing(i); if (m) setTimeout(() => vnOverlay([{ img: BLESS_IMG[r.kind] || 'bless-items', chap: `${b.icon} ${b.name}`, title: m.title, lines: [m.text, `<span class="vn-who">${m.eff}</span>`], btn: '돌아온다 ▸' }]), 0); } },
+      { label: '나중에 가 보겠다', sub: '기한 안에만 가면 돼요' },
+    ] }]);
+}
+
+// 퀘스트 완료 창: 가운데에 보상과 함께 톡 떠오른다
+function showQuestDone(d) {
+  const el = document.createElement('div');
+  el.className = 'qdone-bg';
+  Sound.sfx('reward');
+  el.innerHTML = `<div class="qdone"><div class="qd-ribbon">퀘스트 완료</div><div class="qd-ic">${d.icon}</div><h3>${d.name}</h3><div class="qd-rw">${rewardChips(d.reward)}</div><button class="qd-btn">좋아요</button></div>`;
+  el.onclick = e => { if (e.target === el || e.target.closest('.qd-btn')) el.remove(); };
+  document.body.appendChild(el);
+}
+
 // +N: 할 일 전부
 function openTaskList() {
   const tasks = questTasks();
@@ -2301,7 +2437,7 @@ function openTaskList() {
     title: '📋 할 일',
     options: tasks.map(t => ({ label: `${t.icon} ${t.text}`, onClick: () => setTimeout(() => {
       const m = t.attr.match(/data-goto="([^"]+)"/);
-      if (m) questGoto(m[1]); else if (t.attr.includes('data-collect')) doCollect(null); else if (t.attr.includes('workers')) openWorkerMenu(); else if (t.attr.includes('data-plan')) openPlanModal(0); else if (t.attr.includes('data-org')) openOrgModal(); else if (t.attr.includes('data-report')) openReportModal(0); else if (t.attr.includes('data-transfer')) openTransferModal(); else if (t.attr.includes('data-bless')) openBlessings(); else if (t.attr.includes('data-direction')) openDirectionModal(); else if (t.attr.includes('data-sister')) openSisterScope((sisters().find(sis => !(sis.scope || []).length) || {}).name); else if (t.attr.includes('data-hire')) openApplicants(); else if (t.attr.includes('cate')) openCateMenu();
+      const qm = t.attr.match(/data-quest="([^"]+)"/); if (qm) onQuestTap(qm[1]); else if (m) questGoto(m[1]); else if (t.attr.includes('data-collect')) doCollect(null); else if (t.attr.includes('workers')) openWorkerMenu(); else if (t.attr.includes('data-plan')) openPlanModal(0); else if (t.attr.includes('data-org')) openOrgModal(); else if (t.attr.includes('data-report')) openReportModal(0); else if (t.attr.includes('data-transfer')) openTransferModal(); else if (t.attr.includes('data-bless')) openBlessings(); else if (t.attr.includes('data-direction')) openDirectionModal(); else if (t.attr.includes('data-sister')) openSisterScope((sisters().find(sis => !(sis.scope || []).length) || {}).name); else if (t.attr.includes('data-hire')) openApplicants(); else if (t.attr.includes('cate')) openCateMenu();
     }, 0) })),
   });
 }
@@ -2362,67 +2498,105 @@ function updatePrompt(t) {
 
 // ---------- 화면: 타이틀 / 프롤로그 / 보좌 임기 끝 ----------
 
+// ---------- 이야기 화면 (v1.06): 그림이 화면 가득 장면을 보여 주고, 아래 대화창에 글이 한 줄씩, 선택은 아래에 ----------
+const STORY_IMG = n => `assets/story/${n}.webp?v=1`;
+function vnHtml({ img, chap, dots, title, lines, foot, body, who }) {
+  return `<div class="vn" style="background-image:url('${STORY_IMG(img)}')">
+    <div class="vn-shade"></div>
+    ${chap || dots ? `<div class="vn-top">${chap ? `<span class="vn-chap">${chap}</span>` : ''}${dots || ''}</div>` : ''}
+    <div class="vn-box">
+      ${who ? `<div class="vn-name">${who}</div>` : ''}
+      ${title ? `<div class="vn-title">${title}</div>` : ''}
+      ${lines ? `<div class="vn-lines">${lines}</div>` : ''}
+      ${body || ''}
+      ${foot ? `<div class="vn-foot">${foot}</div>` : ''}
+    </div></div>`;
+}
+// 한 줄씩: 대화창을 누르면 다음 줄, 다 보이면 선택지
+UI.vn = { key: '', n: 1 };
+function vnLines(key, list) {
+  if (UI.vn.key !== key) UI.vn = { key, n: 1 };
+  const n = Math.min(UI.vn.n, list.length);
+  return { html: list.slice(0, n).map((t, i) => `<p class="${i === n - 1 ? 'vn-new' : ''}">${t}</p>`).join(''), more: n < list.length };
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('#app .vn-box') || e.target.closest('button, input')) return;
+  const box = document.querySelector('#app .vn-box');
+  if (box && box.dataset.more === '1') { Sound.sfx('page'); UI.vn.n++; render(); }
+});
+
 function renderTitle() {
-  $app.innerHTML = `
-    <div class="title-screen">
-      <div class="cross">✝️</div>
-      <h1>성당 키우기</h1>
-      <p class="sub">예비 신학생에서 시작하는 한 사제의 일생</p>
-      <div class="card">
-        <div class="field"><label>이름</label><input id="in-name" maxlength="8" placeholder="예: 김민준"></div>
-        <div class="field"><label>세례명</label><input id="in-baptism" maxlength="10" placeholder="예: 안드레아"></div>
-        <button class="btn block" data-act="start">시작하기</button>
-      </div>
-      <p class="muted">프로토타입 v0.50 · 짧은 이야기 → 솔뫼 본당 주임 신부</p>
-    </div>`;
+  $app.innerHTML = vnHtml({ img: 'title', body: `
+    <div class="vn-logo"><div class="vn-cross">✝</div><h1>성당 키우기</h1><p>예비 신학생에서 시작하는 한 사제의 일생</p></div>
+    <div class="vn-form">
+      <label>이름<input id="in-name" maxlength="8" placeholder="예: 김민준"></label>
+      <label>세례명<input id="in-baptism" maxlength="10" placeholder="예: 안드레아"></label>
+    </div>
+    <button class="vn-btn main" data-act="start">이야기 시작하기</button>` });
+  document.querySelector('#app .vn').classList.add('vn-title-screen');
 }
 
+// 부르심 고르기: 그림을 가리지 않게 아래에 작은 칸 넷. 칸을 누르면 그 사연이 대화창에 뜨고 [이 길로]
+UI.vocPick = null;
 function renderPrologue() {
-  $app.innerHTML = `
-    <div class="card">
-      <h2>부르심</h2>
-      <p>고등학교 3학년 겨울. 친구들이 대학 원서를 쓰는 동안, 나는 ${term('신학교')} 입학 원서를 앞에 두고 있다.</p>
-      <p>무엇이 나를 이 길로 이끌었을까?</p>
-    </div>
-    ${VOCATIONS.map(v => `
-      <button class="card vocation" data-vocation="${v.id}">
-        <div class="icon">${v.icon}</div>
-        <h3>${v.title}</h3>
-        <p class="small">${v.desc}</p>
-        <div class="muted">${Object.entries(v.stats).map(([k, n]) => `${STAT_NAMES[k]} +${n}`).join(' · ')}</div>
-      </button>`).join('')}`;
+  const L = vnLines('prologue', [`고등학교 3학년 겨울. 친구들이 대학 원서를 쓰는 동안, 나는 ${term('신학교')} 입학 원서를 앞에 두고 있다.`, '창밖에 눈이 내린다. 무엇이 나를 이 길로 이끌었을까?']);
+  const pick = VOCATIONS.find(v => v.id === UI.vocPick);
+  const tiles = `<div class="voc-tiles">${VOCATIONS.map(v => `<button class="voc-tile${v.id === UI.vocPick ? ' on' : ''}" data-voc-pick="${v.id}"><span class="vt-ic">${v.icon}</span><span class="vt-tx">${v.title}</span></button>`).join('')}</div>`;
+  const lines = pick ? `<p class="vn-new">${pick.desc}</p><p class="voc-stat">${Object.entries(pick.stats).map(([k, n]) => `${STAT_NAMES[k]} +${n}`).join(' · ')}</p>` : L.html;
+  $app.innerHTML = vnHtml({ img: 'prologue', chap: '부르심', title: pick ? `${pick.icon} ${pick.title}` : '겨울밤', lines,
+    body: L.more ? '' : tiles + (pick ? `<button class="vn-btn main" data-vocation="${pick.id}">이 길로 신학교에 간다 ▸</button>` : '<p class="voc-hint">무엇이 나를 이끌었는지 골라 보세요</p>'),
+    foot: L.more ? '<span class="vn-tap">눌러서 계속 ▾</span>' : '' });
+  document.querySelector('#app .vn').classList.add('vn-compact');
+  if (L.more) document.querySelector('#app .vn-box').dataset.more = '1';
 }
+document.addEventListener('click', e => {
+  const t = e.target.closest('#app [data-voc-pick]');
+  if (t) { UI.vocPick = t.dataset.vocPick; render(); }
+});
 
 function renderStory() {
   const s = Game.state, st = s.story;
   prepareScene();
   const sc = storyScene();
-  const dots = STORY.map((_, i) => `<span class="dot ${i < st.idx ? 'past' : i === st.idx ? 'now' : ''}"></span>`).join('');
-  let body;
+  const dots = `<span class="vn-dots">${STORY.map((_, i) => `<i class="${i < st.idx ? 'past' : i === st.idx ? 'now' : ''}"></i>`).join('')}</span>`;
+  const text = sc.text.map(glossarize).concat(sc.pastorType ? [STORY_PASTOR_LINES[st.pastorType]] : []);
+  const L = vnLines(`story${st.idx}`, text);
+  let body = '', foot = '';
   if (st.result) {
     const last = st.idx === STORY.length - 1;
-    body = `
-      <div class="card story-result"><p class="serif">${glossarize(st.result)}</p></div>
-      <button class="btn block" data-act="storyNext">${last ? '📜 발령장 받기 →' : '다음 이야기 →'}</button>`;
-  } else if (sc.quiz) {
-    body = `
-      <div class="card"><p>이번 주 복음은 <b>${st.quiz.gospel.title}</b> (${st.quiz.gospel.ref})입니다. 어떤 주제로 강론할까요?</p></div>
-      ${st.quiz.options.map((o, i) => `<button class="card vocation" data-story-choice="${i}"><b>${esc(o)}</b></button>`).join('')}`;
-  } else {
-    body = sc.choices.map((c, i) => `<button class="card vocation" data-story-choice="${i}"><b>${c.label}</b></button>`).join('');
-  }
-  const pastorLine = sc.pastorType ? `<p>${STORY_PASTOR_LINES[st.pastorType]}</p>` : '';
-  $app.innerHTML = `
-    <div class="story-dots">${dots}</div>
-    <div class="card story-scene">
-      <div class="chapter-label">${sc.label}</div>
-      <div class="story-art">${sc.art}</div>
-      <h2>${glossarize(sc.title)}</h2>
-      ${sc.text.map(t => `<p>${glossarize(t)}</p>`).join('')}
-      ${pastorLine}
-    </div>
-    ${body}
-    <p class="muted" style="text-align:center">${esc(s.baptism)} ${esc(s.name)} · ${s.age}세</p>`;
+    body = `<div class="vn-result">${glossarize(st.result)}</div><button class="vn-btn main" data-act="storyNext">${last ? '📜 발령장 받기' : '다음 이야기'} ▸</button>`;
+  } else if (L.more) foot = '<span class="vn-tap">눌러서 계속 ▾</span>';
+  else if (sc.quiz) body = `<p class="vn-ask">이번 주 복음은 <b>${st.quiz.gospel.title}</b> (${st.quiz.gospel.ref}). 어떤 주제로 강론할까?</p><div class="vn-choices">${st.quiz.options.map((o, i) => `<button class="vn-choice" data-story-choice="${i}"><span class="vc-tx"><b>${esc(o)}</b></span></button>`).join('')}</div>`;
+  else body = `<div class="vn-choices">${sc.choices.map((c, i) => `<button class="vn-choice" data-story-choice="${i}"><span class="vc-tx"><b>${c.label}</b></span></button>`).join('')}</div>`;
+  $app.innerHTML = vnHtml({ img: sc.img || 'title', chap: sc.label, dots, title: glossarize(sc.title), lines: st.result ? '' : L.html, body, foot: foot || `<span class="vn-who">${esc(s.baptism)} ${esc(s.name)} · ${s.age}세</span>` });
+  document.querySelector('#app .vn').classList.add('vn-compact');
+  if (L.more && !st.result) document.querySelector('#app .vn-box').dataset.more = '1';
+}
+
+// 겹쳐 띄우는 그림 장면 (발령장·대화·요청·축복 등)
+// scenes = [{ img, chap, title, who, lines: [], btn, choices: [{ label, sub, onClick }] }], 마지막 단추를 누르면 onDone
+function vnOverlay(scenes, onDone) {
+  let i = 0, n = 1;
+  const el = document.createElement('div');
+  el.className = 'vn-overlay';
+  document.body.appendChild(el);
+  const prevTalk = UI.talking;
+  UI.talking = { scene: true };
+  const close = fn => { el.remove(); UI.talking = prevTalk && prevTalk.scene ? null : prevTalk; if (fn) fn(); if (onDone) onDone(); save(); render(); };
+  const draw = () => {
+    const sc = scenes[i], lines = sc.lines || [], more = n < lines.length;
+    const ch = !more && sc.choices ? `<div class="vn-choices">${sc.choices.map((c, k) => `<button class="vn-choice" data-vn-choice="${k}" ${c.disabled ? 'disabled' : ''}><span class="vc-tx"><b>${c.label}</b>${c.sub ? `<small>${c.sub}</small>` : ''}</span></button>`).join('')}</div>` : '';
+    el.innerHTML = vnHtml({ img: sc.img, chap: sc.chap, title: sc.title, who: sc.who,
+      lines: lines.slice(0, n).map((t, k) => `<p class="${k === n - 1 ? 'vn-new' : ''}">${t}</p>`).join(''),
+      body: more ? '' : ch || `<button class="vn-btn main" data-vn-next="1">${sc.btn || '다음 ▸'}</button>`, foot: more ? '<span class="vn-tap">눌러서 계속 ▾</span>' : '' });
+  };
+  el.onclick = e => {
+    const c = e.target.closest('[data-vn-choice]');
+    if (c) { close(scenes[i].choices[+c.dataset.vnChoice].onClick); return; }
+    if (e.target.closest('[data-vn-next]')) { if (++i >= scenes.length) { close(null); return; } n = 1; draw(); return; }
+    if (e.target.closest('.vn-box') && n < (scenes[i].lines || []).length) { Sound.sfx('page'); n++; draw(); }
+  };
+  draw();
 }
 
 function renderCurateEnd() {
@@ -2603,6 +2777,8 @@ function openSettings() {
       <div class="settings-row"><div><b>테스트 모드</b><div class="muted">행동력 회복과 방치 시간이 60배 빨라져요</div></div>
         <button class="btn small ${s.testMode ? '' : 'ghost'}" id="tm">${s.testMode ? '켜짐' : '꺼짐'}</button></div>
       ${s.testMode ? `<div class="settings-row"><div><b>행동력 가득 채우기</b><div class="muted">테스트용</div></div><button class="btn small ghost" id="fill">채우기</button></div>` : ''}
+      <div class="settings-row"><div><b>효과음</b><div class="muted">누르기·거두기·공사·종소리 같은 소리</div></div><button class="btn small ${Sound.pref.sfx ? '' : 'ghost'}" id="snd">${Sound.pref.sfx ? '켜짐' : '꺼짐'}</button></div>
+      <div class="settings-row"><div><b>목소리</b><div class="muted">퀘스트를 청하는 사람·사목회장의 말을 읽어 줘요 (기기의 한국어 음성)</div></div><button class="btn small ${Sound.pref.voice ? '' : 'ghost'}" id="vc">${Sound.pref.voice ? '켜짐' : '꺼짐'}</button></div>
       <div class="settings-row"><div><b>조작법</b><div class="muted">방향키·WASD 이동 · 스페이스/E 상호작용 · 폰은 왼쪽 아래 조이스틱</div></div></div>
       <div class="settings-row"><div><b>처음부터 다시</b><div class="muted">저장된 진행이 지워져요</div></div><button class="btn small ghost" id="rs">초기화</button></div>`,
     buttons: [{ label: '닫기' }],
@@ -2618,6 +2794,8 @@ function openSettings() {
   const fill = document.getElementById('fill');
   if (fill) fill.onclick = () => { s.energy = s.energyMax; closeModalThen(); toast('행동력을 채웠어요'); };
   document.getElementById('rs').onclick = () => { closeModalThen(); confirmReset(); };
+  document.getElementById('snd').onclick = () => { Sound.pref.sfx = !Sound.pref.sfx; Sound.savePref(); closeModalThen(); openSettings(); };
+  document.getElementById('vc').onclick = () => { Sound.pref.voice = !Sound.pref.voice; Sound.savePref(); if (!Sound.pref.voice) Sound.hush(); else Sound.speak('목소리를 켰어요.', 'clerk'); closeModalThen(); openSettings(); };
 }
 
 function confirmReset() {
@@ -2709,7 +2887,9 @@ function portraitCanvas(look) {
   return c;
 }
 
-function startTalk(talk, onDone) {
+// 사목회장과의 대화 배경 그림 (v1.06): 마당에서, 살림 이야기는 사무실에서
+const TALK_IMG = { vaultFull: 'talk-office', levyDue: 'talk-office', staff: 'talk-office', plan: 'talk-office', policy: 'talk-office', committee: 'talk-office' };
+function startTalk(talk, onDone, img) {
   UI.talking = { talk, i: 0, onDone };
   World.keys = {};
   let el = document.getElementById('talk');
@@ -2726,6 +2906,7 @@ function startTalk(talk, onDone) {
     el.querySelector('.talk-reply').onclick = talkNext;
     el.querySelector('.talk-skip').onclick = () => { const p = Game.state.pastor; if (p.tutorial) p.tutorial.step = TUTORIAL.length; endTalk(); toast('안내를 건너뛰었어요. 아래 본당 현황에서 언제든 사목회장을 찾을 수 있어요.'); };
   }
+  el.style.backgroundImage = `url('${STORY_IMG(img || 'talk-yard')}')`;
   el.hidden = false;
   showTalk();
 }
@@ -2734,7 +2915,7 @@ function showTalk() {
   const t = UI.talking, el = document.getElementById('talk');
   let cur = t.talk[t.i];
   if (cur && cur[0] === 'p') { el.querySelector('.txt').innerHTML = '…'; }
-  else if (cur) el.querySelector('.txt').innerHTML = cur[1];
+  else if (cur) { el.querySelector('.txt').innerHTML = cur[1]; Sound.speak(cur[1], 'council'); }
   const next = cur && cur[0] === 'c' ? t.talk[t.i + 1] : cur;
   const reply = el.querySelector('.talk-reply');
   if (next && next[0] === 'p') { reply.innerHTML = next[1]; reply.classList.remove('plain'); }
@@ -2753,6 +2934,7 @@ function talkNext() {
 }
 
 function endTalk() {
+  Sound.hush();
   UI.talking = null;
   const el = document.getElementById('talk');
   if (el) el.hidden = true;
@@ -2769,12 +2951,12 @@ function tutorialTick() {
   if (!t) return;
   const step = TUTORIAL[t.step];
   if (step) {
-    if (t.talked !== t.step) { startTalk(step.talk, () => { t.talked = t.step; if (step.done()) tutorialTick(); }); return; }
+    if (t.talked !== t.step) { startTalk(step.talk, () => { t.talked = t.step; if (step.done()) tutorialTick(); }, TALK_IMG[step.id]); return; }
     if (step.done()) { t.step++; tutorialTick(); }
     return;
   }
   const tip = COUNCIL_TIPS.find(x => !t.seen[x.id] && x.when());
-  if (tip) { t.seen[tip.id] = true; startTalk(tip.talk); }
+  if (tip) { t.seen[tip.id] = true; startTalk(tip.talk, null, TALK_IMG[tip.id]); }
 }
 
 // 안내 중: 창 안에서 눌러야 할 선택지에 "여기를 누르세요"
@@ -2818,12 +3000,10 @@ function tutorialGo(spec) {
 function showPastorIntro() {
   const s = Game.state;
   // 발령장을 닫으면 사목회장이 맞이하러 나온다 (tutorialTick)
-  modal({
-    title: '📜 발령장',
-    html: `<p class="serif" style="text-align:center;font-size:17px">${esc(s.baptism)} ${esc(s.name)} 신부를<br><b>솔뫼 본당 ${term('주임 신부')}</b>로 임명합니다.</p>
-      <p class="small" style="text-align:center">버스가 하루 네 번 다니는 산골 마을. 오래된 성당 마당에서 누군가 손을 흔든다.</p>`,
-    buttons: [{ label: '솔뫼로 출발 →', onClick: () => setTimeout(tutorialTick, 300) }],
-  });
+  vnOverlay([
+    { img: 'decree', chap: '수원교구', title: '📜 발령장', lines: [`<span class="vn-decree">${esc(s.baptism)} ${esc(s.name)} 신부를<br><b>솔뫼 본당 ${term('주임 신부')}</b>로 임명합니다.</span>`, '보좌 신부 2년을 마친 봄, 교구청에서 봉투 하나가 왔다.'], btn: '봉투를 접는다 ▸' },
+    { img: 'solmoe', chap: '솔뫼 본당', title: '산골 마을의 작은 성당', lines: ['버스가 하루 네 번 다니는 산골 마을. 녹슨 컨테이너 몇 개가 성당의 전부다.', '마당 입구에서 노부부가 손을 흔든다. "신부님, 오셨어요!"'], btn: '솔뫼로 출발 ▸' },
+  ], () => setTimeout(tutorialTick, 300));
 }
 
 function onOrdain() {
@@ -3078,6 +3258,9 @@ function boot() {
     if (bar) { onBarButton(bar.dataset.bar); return; }
     if (e.target.closest('#hud [data-collect]') && !UI.modalOpen) doCollect(null);
     if (e.target.closest('#hud [data-qgoal]') && !UI.modalOpen) openGoalModal();
+    { const qe = e.target.closest('#hud [data-quest]'); if (qe && !UI.modalOpen) onQuestTap(qe.dataset.quest); }
+    { const be = e.target.closest('#hud [data-bless-i]'); if (be && !UI.modalOpen) openBlessScene(+be.dataset.blessI); }
+    if (e.target.closest('#hud [data-qlist]') && !UI.modalOpen) openQuestModal();
     if (e.target.closest('#hud [data-qmore]') && !UI.modalOpen) openTaskList();
     if (e.target.closest('#hud [data-plan]') && !UI.modalOpen) openPlanModal(0);
     if (e.target.closest('#hud [data-org]') && !UI.modalOpen) openOrgModal();
@@ -3110,7 +3293,8 @@ function boot() {
     if (el) el.outerHTML = energyHtml();
     if (s.phase === 'pastor') {
       const t = tickParish();
-      for (const d of t.done) toast(`🏗️ ${d}`);
+      for (const d of t.done) { Sound.sfx('done'); toast(`🏗️ ${d}`, true); }
+      if (t.quests && t.quests.length) { showQuestRequest(t.quests[t.quests.length - 1]); save(); }
       if (t.applicants) { toast(`📨 채용 공고를 보고 지원자 ${t.applicants}명이 찾아왔어요! 사무실에서 만나 보세요`); save(); }
       if (t.dayLines && t.dayLines.length) toast(`🌅 새 날이 밝았어요. ${t.dayLines[0]}`);
       if (t.done.length || (t.dayLines && t.dayLines.length)) { save(); syncWorldLayout(); }
@@ -3154,7 +3338,7 @@ function openTransferModal() {
     modal({
       title: '📜 본당 성적표',
       html: `${reportCardHtml(card)}
-        <p class="small">${p.transfer ? `인사발령까지 <b>${transferWeeksLeft()}주일</b> 남았어요. 그동안 성적을 더 올려 보세요.` : `성당이 <b>Lv${TRANSFER.church}</b>까지 자라면 교구에서 인사발령 공문이 와요. 그때 이 성적표로 다음 본당이 정해져요.`}</p>
+        <p class="small">${p.transfer ? `인사발령까지 <b>${transferWeeksLeft()}주일</b> 남았어요. 그동안 성적을 더 올려 보세요.` : (questRun() ? `첫 본당 퀘스트 <b>${FIRST_QUESTS.length}개</b>를 모두 마치면 교구에서 인사발령 공문이 와요 (지금 ${questDoneCount()}개).` : `성당이 <b>Lv${TRANSFER.church}</b>까지 자라면 교구에서 인사발령 공문이 와요.`) + ' 그때 이 성적표로 다음 본당이 정해져요.'}</p>
         <p class="muted">더 좋은 본당일수록 조건이 높아요: ${['city', 'newtown', 'harbor'].map(id => `${PARISHES[id].icon} ${PARISHES[id].kind} (${transferNeedText(id)})`).join(' · ')} · 🏝️ 섬 본당은 언제나</p>${careerHtml()}`,
     });
     return;
@@ -3232,3 +3416,6 @@ function openShopMenu(e) {
     });
   }
 }
+
+// 단추를 누를 때 살짝 딸깍 (v1.06)
+document.addEventListener('pointerdown', e => { if (e.target.closest('button:not(:disabled), .opt, [data-goto]')) Sound.sfx('tap'); }, true);

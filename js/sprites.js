@@ -267,14 +267,14 @@ function drawSecondFloor(ctx, b, st) {
 // assets/sprites/<이름>.png 가 있으면 그 그림을 쓰고, 없으면 코드로 그린다.
 // 그림 크기는 그대로(1픽셀 = 월드 1픽셀) 쓰고, 바닥 마름모의 가운데 아래 꼭짓점에 그림 아래쪽 가운데를 맞춘다.
 // 그림 파일을 바꾸면 이 숫자를 올린다 (브라우저가 예전 그림을 기억하지 않게)
-const SPRITE_VER = 47;
+const SPRITE_VER = 52;
 // 그림마다 잰 바닥 자리 [너비, 높이, 왼쪽 끝, 오른쪽 끝, 앞 꼭짓점 x, y] (tools/sprite-meta.mjs)
 let SPRITE_META = {};
 if (typeof fetch === 'function' && typeof document !== 'undefined') fetch((typeof SPRITE_BASE !== 'undefined' ? SPRITE_BASE : '') + 'assets/sprites/meta.json?v=' + SPRITE_VER).then(r => r.json()).then(j => { SPRITE_META = j; }).catch(() => {});
 const SPRITE_DIR = (typeof SPRITE_BASE !== 'undefined' ? SPRITE_BASE : '') + 'assets/sprites/';
 const SPRITE_TARGETS = [
   // 겉모습 단계(tier)마다 그림 하나: 성당·사제관은 두 레벨씩, 교리실은 ROOM_LEVELS의 tier
-  ...[1, 2, 3, 4, 5].map(l => ({ key: `church-lv${l}`, name: `성당 Lv${2 * l - 1}~${2 * l}`, w: 4, d: 5, ref: { style: 'church', h: 20 + l * 3 } })),
+  ...[1, 2, 3, 4, 5, 6].map(l => ({ key: `church-lv${l}`, name: `성당 그림 ${l}단계`, w: 4, d: 5, ref: { style: 'church', h: 20 + l * 3 } })),
   ...[1, 2, 3, 4, 5].map(l => ({ key: `rectory-lv${l}`, name: `사제관 Lv${2 * l - 1}~${2 * l}`, w: 2, d: 2, ref: { style: 'house', h: 18 } })),
   ...[1, 2, 3, 4, 5].map(l => ({ key: `classroom-lv${l}`, name: ROOM_TIERS[l], w: 2, d: 3,
     ref: { style: l >= 3 ? (l >= 4 ? 'school' : 'brick') : 'container', roofed: l === 2, h: l >= 3 ? 12 + l * 2 : 13 } })),
@@ -330,7 +330,7 @@ function getSprite(key) {
 // 건물에 맞는 그림 이름 후보 (정확한 레벨 → 레벨 없는 이름)
 function spriteKeys(b) {
   if (b.scaffold) { const G = (typeof MAP_GRID !== 'undefined' && World.map && World.map.grid) || 1; return [`scaffold-${Math.max(b.w, b.d) / G}x${Math.min(b.w, b.d) / G}`, 'scaffold']; }
-  if (b.id === 'church') return [`church-lv${CHURCH_LEVELS[b.level] ? CHURCH_LEVELS[b.level].tier : 1}`, 'church'];
+  if (b.id === 'church') return [`church-lv${churchStage(b.level)}`, 'church'];
   if (b.id === 'rectory') return [`rectory-lv${Math.ceil(b.level / 2)}`, 'rectory'];
   if (b.id === 'office') return [`office-lv${Math.ceil(b.level / 2)}`, 'office'];
   if (b.rooms) return [`classroom-lv${b.tier}`, 'classroom'];
