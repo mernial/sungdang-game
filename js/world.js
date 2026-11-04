@@ -827,7 +827,7 @@ function drawGroundChunks(ctx, m, gtex, dtex, camX, camY, res) {
   // 한 장면에 새로 그리는 조각은 4ms 안에서만 (폰에서 한 장면이 길어지지 않게). 나머지는 낮은 해상도 바닥이 대신 보이다가 다음 장면들에 채워진다
   const t0 = performance.now();
   let low = null;
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = res < World.res; // 늘여 붙일 때는 부드럽게
   for (let i = x0; i <= x1; i++) for (let j = y0; j <= y1; j++) {
     const k = res + '|' + i + ',' + j;
     let c = GROUND_CHUNKS.get(k);
@@ -836,7 +836,7 @@ function drawGroundChunks(ctx, m, gtex, dtex, camX, camY, res) {
     else {
       low = low || groundLow(m, gtex, dtex);
       const L = low, wx = i * CS / res, wy = j * CS / res, ws = CS / res, sx = (wx - L.x) / L.w * L.c.width, sy = wy / L.h * L.c.height, sw = ws / L.w * L.c.width, sh = ws / L.h * L.c.height;
-      ctx.imageSmoothingEnabled = true; ctx.drawImage(L.c, sx, sy, sw, sh, wx, wy, ws, ws); ctx.imageSmoothingEnabled = false;
+      ctx.imageSmoothingEnabled = true; ctx.drawImage(L.c, sx, sy, sw, sh, wx, wy, ws, ws); ctx.imageSmoothingEnabled = res < World.res;
       continue;
     }
     GROUND_CHUNKS.set(k, c);
@@ -849,6 +849,7 @@ function drawGroundChunks(ctx, m, gtex, dtex, camX, camY, res) {
   if (!World.groundIdle) {
     World.groundIdle = idle(dl => {
       World.groundIdle = null;
+      if (World.groundLowSig !== sig) groundLow(m, gtex, dtex); // 확대·축소 때 깔 흐린 바닥도 미리
       for (let i = x0 - 1; i <= x1 + 1; i++) for (let j = y0 - 1; j <= y1 + 1; j++) {
         if (dl.timeRemaining() < 6) return;
         const k = res + '|' + i + ',' + j;
@@ -877,7 +878,8 @@ function worldDraw() {
   // 통짜 바닥 그림(assets/sprites/map-ground.png)이 있으면 지도 마름모에 맞춰 한 번에 깔고, 길·안개만 칸으로 덧그린다
   // 바닥 (v0.81): 이어 붙이는 잔디·흙 무늬를 쿼터뷰 바닥에 비스듬히 깐다 (한 칸 = 무늬 128픽셀, 가까이 봐도 또렷)
   const gtex = World.overview && m === MAPS.solmoe && getSprite('ground-grass'), dtex = gtex && getSprite('ground-dirt');
-  if (gtex) drawGroundChunks(ctx, m, gtex, dtex, camX, camY, res);
+  // 바닥 무늬는 칸 하나에 128픽셀이라 4배 넘게 키워 그려도 더 고와지지 않는다 → 4배까지만 그려 늘여 붙인다 (v1.08 폰에서 크게 확대하면 조각이 4배로 늘어 버벅이던 것)
+  if (gtex) drawGroundChunks(ctx, m, gtex, dtex, camX, camY, Math.min(res, 4));
   for (let x = 0; x < m.w; x++) for (let y = 0; y < m.h; y++) {
     const k = x + ',' + y;
     const built = World.overview && Game.state.pastor && Game.state.pastor.paths && Game.state.pastor.paths[k];
