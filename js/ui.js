@@ -34,7 +34,37 @@ function toast(msg, silent) {
 
 // ---------- 모달 ----------
 
-// opts: { title, html, options: [{label, sub, disabled, onClick}], buttons: [{label, cls, onClick}] }
+// ---------- 대화 얼굴 (v1.08) ----------
+// 사람이 말하는 창은 게임 화면을 그대로 둔 채, 왼쪽 아래에 말하는 사람 얼굴이 떠오르고 글은 아래 상자에 나온다.
+// 얼굴 그림: assets/story/face-<이름>.webp (tools/comfy-face.py)
+const FACE_IMG = n => `assets/story/face-${n}.webp?v=2`;
+// 말하는 사람 글(이름·별명)로 얼굴을 고른다
+function faceFor(who) {
+  const w = String(who || '');
+  if (/수녀/.test(w)) return 'sister';
+  if (/사목회장/.test(w)) return 'council';
+  if (/사무원|사무장/.test(w)) return 'clerk';
+  if (/주교/.test(w)) return 'diocese';
+  if (/할머니|어머님|권사|노부인|할매/.test(w)) return 'faithful';
+  if (/할아버지|어르신|노인|이장|회장님|영감/.test(w)) return 'grandpa';
+  if (/청년|학생|젊은|아이|소년|소녀|대학|군인|신학생/.test(w)) return 'youth';
+  if (/자매|엄마|어머니|아내|부인|여|며느리|딸|교사/.test(w)) return 'woman';
+  if (/신부/.test(w)) return 'deanery';
+  return 'man';
+}
+// 단체가 청할 때: 단체 성격에 맞는 얼굴
+function faceForUnit(type) {
+  const u = String(type || '');
+  if (/^(youth|soccer|server|school2|organ)$/.test(u)) return 'youth';
+  if (/^(parentsK|parentsY|mothers|legio|catechumen|choir|school|altar|flower|cafe|prayer|shop)$/.test(u)) return 'woman';
+  if (/^(senior|elders|relics)$/.test(u)) return 'faithful';
+  if (/^(district|christopher|golf|facility|vincent|eucharist)$/.test(u)) return 'grandpa';
+  if (/^vocation$/.test(u)) return 'sister';
+  return 'man';
+}
+
+// opts: { title, html, options: [{label, sub, disabled, onClick}], buttons: [{label, cls, onClick}],
+//         face: 얼굴 이름(있으면 대화 모양 창: 게임 화면 위 얼굴 + 아래 글 상자), who: 이름표(없으면 title), bg: 게임 화면 대신 깔 장면 그림 }
 function modal(opts) {
   UI.modalQueue.push(opts);
   if (!UI.modalOpen) nextModal();
@@ -61,24 +91,27 @@ function nextModal() {
   const compact = document.body.classList.contains('overview');
   const tileHtml = ({ o, i }, n) => {
     const m = o.label.match(/^(\S+)\s+([\s\S]*)$/) || [null, '•', o.label];
-    return `<button class="opt tile" data-opt="${i}" ${o.disabled ? 'disabled' : ''} title="${(o.sub || '').replace(/<[^>]+>/g, '').replace(/"/g, '&quot;')}">
+    return `<button class="opt tile" data-opt="${i}" ${o.disabled ? 'aria-disabled="true"' : ''} title="${(o.sub || '').replace(/<[^>]+>/g, '').replace(/"/g, '&quot;')}">
       <span class="num">${n}</span><span class="t-icon">${m[1]}</span><span class="t-label">${m[2]}</span>${o.tileSub ? `<span class="sub">${o.tileSub}</span>` : ''}</button>`;
   };
+  const say = !!opts.face;
+  if (say && typeof Sound !== 'undefined' && !opts.silent) { const q = (String(opts.html || '').match(/class="serif[^"]*">([\s\S]*?)<\/p>/) || [])[1]; if (q) setTimeout(() => Sound.speak(q, opts.face), 350); }
   root.innerHTML = `
-    <div class="modal-bg"><div class="modal${hero ? ' has-hero' : ''}">
+    <div class="modal-bg${say ? ' say-bg' : ''}"${say && opts.bg ? ` style="background:linear-gradient(180deg, rgba(20,12,8,0) 40%, rgba(20,12,8,.45) 100%), #2b2018 url('${STORY_IMG(opts.bg)}') center / cover no-repeat"` : ''}>${say ? `<div class="say-face${opts.faceCls ? ' ' + opts.faceCls : ''}"><img src="${FACE_IMG(opts.face)}" alt=""></div>` : ''}<div class="modal${hero ? ' has-hero' : ''}${say ? ' say' : ''}">
       ${dismiss ? '<button class="m-close" data-close="1" aria-label="닫기">✕</button>' : ''}
+      ${say && (opts.who || opts.title) ? `<div class="say-name">${opts.who || opts.title}</div>` : ''}
       <div class="m-head">${hero}<div class="m-titles">
-        ${opts.title ? `<h2>${opts.title}</h2>` : ''}
+        ${opts.title && !(say && !opts.who) ? `<h2>${opts.title}</h2>` : ''}
         <div class="m-desc">${opts.html || ''}</div>
       </div></div>
       ${tiles.length && !compact ? `<div class="tiles">${tiles.map((x, k) => tileHtml(x, k + 1)).join('')}</div>` : ''}
       ${rows.length || (compact && tiles.length) ? `<div class="buttons opt-rows">
         ${compact ? tiles.map(({ o, i }) => { const m = o.label.match(/^(\S+)\s+([\s\S]*)$/) || [null, '•', o.label]; return `
-          <button class="opt box" data-opt="${i}" ${o.disabled ? 'disabled' : ''} title="${(o.sub || '').replace(/<[^>]+>/g, '').replace(/"/g, '&quot;')}">
+          <button class="opt box" data-opt="${i}" ${o.disabled ? 'aria-disabled="true"' : ''} title="${(o.sub || '').replace(/<[^>]+>/g, '').replace(/"/g, '&quot;')}">
             <span class="o-label"><span class="o-icon">${m[1]}</span>${m[2]}</span>${o.tileSub ? `<span class="sub">${o.tileSub}</span>` : ''}
           </button>`; }).join('') : ''}
         ${rows.map(({ o, i }, k) => `
-          <button class="opt" data-opt="${i}" ${o.disabled ? 'disabled' : ''} title="${(o.sub || '').replace(/<[^>]+>/g, '').replace(/"/g, '&quot;')}">
+          <button class="opt" data-opt="${i}" ${o.disabled ? 'aria-disabled="true"' : ''} title="${(o.sub || '').replace(/<[^>]+>/g, '').replace(/"/g, '&quot;')}">
             <span class="o-label"><span class="num">${tiles.length + k + 1}</span>${o.label}</span>${o.sub ? `<span class="sub">${o.sub}</span>` : ''}
           </button>`).join('')}
       </div>` : ''}
@@ -86,13 +119,26 @@ function nextModal() {
         ${buttons.map((b, i) => `<button class="btn ${b.cls || ''}" data-btn="${i}">${b.label}</button>`).join('')}
       </div>
     </div></div>`;
-  root.querySelectorAll('[data-opt]').forEach(el => el.onclick = () => closeModalThen(opts.options[+el.dataset.opt].onClick));
+  // 잠긴 선택지(v1.07): 눌러도 닫지 않고 왜 안 되는지 알려 준다 (예전엔 눌러도 아무 일이 없어 고장처럼 보였다)
+  root.querySelectorAll('[data-opt]').forEach(el => el.onclick = () => { const o = opts.options[+el.dataset.opt]; if (o.disabled) { lockedTap(o); return; } closeModalThen(o.onClick); });
   markHintOption(root);
   root.querySelectorAll('[data-btn]').forEach(el => el.onclick = () => closeModalThen(buttons[+el.dataset.btn].onClick));
   if (dismiss) {
     root.querySelector('[data-close]').onclick = () => closeModalThen(null);
     root.querySelector('.modal-bg').addEventListener('click', e => { if (e.target.classList.contains('modal-bg')) closeModalThen(null); });
   }
+}
+
+// 잠긴 선택지를 눌렀을 때: 까닭(why → 설명 → 작은 글)과, 행동력 때문이면 다음 회복까지 남은 시간
+function lockedTap(o) {
+  const strip = t => String(t || '').replace(/<[^>]+>/g, '').trim();
+  let why = strip(o.why) || strip(o.sub) || strip(o.tileSub) || '지금은 할 수 없어요';
+  const cost = (String(o.label).match(/⚡(\d+)/) || [])[1];
+  if (/행동력/.test(why) || (cost && Game.state.energy < +cost)) {
+    const sec = secondsToNextEnergy();
+    why = `⚡ 행동력이 모자라요 (지금 ${Math.floor(Game.state.energy)}${cost ? ` / 필요 ${cost}` : ''})${sec !== null ? ` · ${fmtDur(sec)} 뒤 1 차요` : ''}`;
+  }
+  Sound.sfx('error'); toast(`🔒 ${why}`);
 }
 
 // 건물 창 머리: 지금 방향의 건물 그림을 작은 마당 위에 세워 보여 준다
@@ -133,7 +179,7 @@ document.addEventListener('keydown', e => {
   const root = document.getElementById('modal-root');
   if (/^Digit[1-9]$/.test(e.code)) {
     const opt = root.querySelectorAll('.opt')[+e.code.slice(5) - 1];
-    if (opt && !opt.disabled) opt.click();
+    if (opt) opt.click();
   } else if (e.code === 'Escape') {
     const btns = root.querySelectorAll('[data-btn]');
     if (btns.length) btns[btns.length - 1].click();
@@ -144,6 +190,7 @@ document.addEventListener('keydown', e => {
 });
 
 function closeModalThen(fn) {
+  if (document.querySelector('#modal-root .say-bg') && typeof Sound !== 'undefined') Sound.hush();
   if (fn) fn();
   save();
   render();
@@ -244,7 +291,7 @@ function chatModal(t) {
     s.curate.monthly['chat_' + t.npc.id] = true;
     gain('rapport', 0.6);
   }
-  modal({ title: t.label, html: `<p class="serif">${line}</p>`, buttons: [{ label: '닫기', cls: 'ghost' }] });
+  modal({ face: t.npc && /sister|수녀/.test(t.npc.id + t.label) ? 'sister' : faceFor(t.label), who: t.label, html: `<p class="serif">${line}</p>`, buttons: [{ label: '닫기', cls: 'ghost' }] });
 }
 
 const MENUS = {
@@ -264,19 +311,19 @@ const MENUS = {
       onClick: () => { Game.state.energy = Game.state.energyMax; toast('😴 푹 쉬었어요. 행동력이 가득 찼어요.'); },
     }],
   }),
-  classmate: t => modal({ title: t.label, html: `<p class="serif">${pick(['"같이 커피 한잔할래?"', '"요즘 기도 잘 돼?"', '"우리 서품 때까지 같이 가자."'])}</p>`, options: actionOptions('classmate') }),
+  classmate: t => modal({ face: 'youth', who: t.label, title: t.label, html: `<p class="serif">${pick(['"같이 커피 한잔할래?"', '"요즘 기도 잘 돼?"', '"우리 서품 때까지 같이 가자."'])}</p>`, options: actionOptions('classmate') }),
   director: () => {
     const s = Game.state;
     const ch = SEMINARY_CHAPTERS[s.seminary.chapter];
-    if (ch.ordination) { modal({ title: '영성 지도 신부님', html: '<p class="serif">"드디어 오늘이군. 성당으로 가게. 모두가 기다리고 있네."</p>' }); return; }
+    if (ch.ordination) { modal({ face: 'mentor', title: '영성 지도 신부님', html: '<p class="serif">"드디어 오늘이군. 성당으로 가게. 모두가 기다리고 있네."</p>' }); return; }
     if (!chapterTasksDone()) {
       const left = ch.tasks.filter(x => (s.seminary.progress[x.action] || 0) < x.count)
         .map(x => { const a = ACTIONS.find(y => y.id === x.action); return `${a.icon} ${a.name} (${whereIs(x.action)})`; });
-      modal({ title: '영성 지도 신부님', html: `<p class="serif">"서두르지 말게. 아직 할 일이 남았네."</p><p class="small">${left.join('<br>')}</p>` });
+      modal({ face: 'mentor', title: '영성 지도 신부님', html: `<p class="serif">"서두르지 말게. 아직 할 일이 남았네."</p><p class="small">${left.join('<br>')}</p>` });
       return;
     }
     modal({
-      title: '영성 지도 신부님',
+      face: 'mentor', title: '영성 지도 신부님',
       html: `<p class="serif">"${ch.firstHomily ? '준비가 되었나? 이제 강론대에 설 시간이네.' : '이번 과정을 잘 마쳤군.'}"</p>`,
       options: [{ label: ch.firstHomily ? '🎤 첫 강론 하러 가기' : '➡️ 다음 과정으로', onClick: onNextChapter }],
     });
@@ -333,7 +380,7 @@ const MENUS = {
     const c = Game.state.curate;
     const type = PASTOR_TYPES[c.pastorType];
     modal({
-      title: `👴 ${c.pastorName} 신부님`,
+      face: 'pastor', title: `👴 ${c.pastorName} 신부님`,
       html: `<p class="muted">${type.label} · 관계 ${Math.floor(c.relation)}</p>${c.pastorType === 'dumper' && c.dumpedTasks > 0 ? `<p class="serif">"아, 보좌 신부. 사무실에 서류 ${c.dumpedTasks}건 좀 봐 주게."</p>` : ''}`,
       options: [
         ...(c.ready ? [{ label: '📜 발령 소식 듣기', sub: '청년회를 잘 키웠어요. 신부님이 하실 말씀이 있대요', onClick: onCurateDone }] : []),
@@ -768,7 +815,7 @@ function jobOptions(j) {
   if (!j) return [];
   const s = Game.state, cost = rushCost(j), short = gems() < cost;
   return [
-    { label: `🔨 공사 거들기 <span class="cost">⚡${helpCost()}</span>`, sub: `남은 시간 ${fmtDur(jobLeftSec(j))} → ${hasPerk('youth3') ? 45 : 30}% 단축`, disabled: s.energy < helpCost(), onClick: () => toast(helpJob(j)) },
+    { label: `🔨 공사 거들기 <span class="cost">⚡${helpCost()}</span>`, sub: s.energy < helpCost() ? `⚡ 행동력이 모자라요 (지금 ${Math.floor(s.energy)} / 필요 ${helpCost()})` : `남은 시간 ${fmtDur(jobLeftSec(j))} → ${hasPerk('youth3') ? 45 : 30}% 단축`, disabled: s.energy < helpCost(), onClick: () => toast(helpJob(j)) },
     {
       label: `💎 바로 완성 <span class="cost">💎${cost}</span>`, sub: short ? `다이아가 모자라요 (가진 다이아 ${gems()}개) · 눌러서 다이아 상점` : `기다리지 않고 지금 끝내요. 남은 시간이 길수록 다이아가 더 들어요 · 가진 다이아 ${gems()}개`,
       onClick: () => { if (short) { setTimeout(openGemShop, 0); return; } const m = rushJob(j); if (m) toast(`💎 ${m}`); },
@@ -967,7 +1014,7 @@ function meetingOption(key, room) {
 function openCouncilMenu() {
   const p = Game.state.pastor, open = committeeUnlocked(), ready = ORG.filter(orgReady).length;
   modal({
-    title: '🧑‍💼 사목회장',
+    face: 'council', who: COUNCIL_NAME, title: '🧑‍💼 사목회장',
     html: `<p class="serif">"${open ? `신부님, 위원장들이 올린 건의가 ${p.agenda.length}건 있어요.` : ready ? '신부님, 위원장으로 모실 만한 분이 있어요! 조직도를 한번 보시지요.' : '신부님, 본당 일을 함께 꾸릴 분과와 위원장을 세워 가시지요.'}"</p>`,
     options: [
       { tile: true, label: '🏛️ 조직도', tileSub: `위원장 ${chairsCount()}명${ready ? ` · 선임 가능 ${ready}` : ''}`, onClick: () => setTimeout(openOrgModal, 0) },
@@ -1046,10 +1093,10 @@ function openCommittee() {
     });
     return;
   }
-  if (!p.agenda.length) { modal({ title: '📨 상임위원회', html: '<p class="serif">"오늘은 올라온 건의가 없습니다, 신부님. 다들 잘 지내고 있어요."</p>' }); return; }
+  if (!p.agenda.length) { modal({ face: 'council', who: COUNCIL_NAME, title: '📨 상임위원회', html: '<p class="serif">"오늘은 올라온 건의가 없습니다, 신부님. 다들 잘 지내고 있어요."</p>' }); return; }
   const a = p.agenda[0], item = AGENDAS[a.type][a.idx];
   modal({
-    title: `📨 상임위 · ${UNITS[a.type].icon} ${UNITS[a.type].name} 위원장`,
+    face: faceForUnit(a.type), who: `${UNITS[a.type].icon} ${UNITS[a.type].name} 위원장`, title: '📨 상임위원회 건의',
     html: `<p class="serif">"${item.text}"</p><p class="muted">남은 건의 ${p.agenda.length}건${a.age ? ` · ${a.age}일째 기다리는 중` : ''}</p>`,
     options: item.options.map((o, i) => ({
       label: `${o.label}${o.cost ? ` <span class="cost">💰${agendaCost(o)}</span>` : ''}${o.energy ? ` <span class="cost">⚡${o.energy}</span>` : ''}`,
@@ -1127,7 +1174,7 @@ function openCouncil() {
 function openVillage(id) {
   const v = VILLAGES[id], st = Game.state.pastor.villages[id];
   if (st.open) {
-    modal({ title: v.elder, html: `<p class="serif">"신부님 덕분에 ${v.name}에도 다시 기도 소리가 나요. 공소가 생기면 좋겠어요."</p>` });
+    modal({ face: faceFor(v.elder) === 'man' ? 'grandpa' : faceFor(v.elder), title: v.elder, html: `<p class="serif">"신부님 덕분에 ${v.name}에도 다시 기도 소리가 나요. 공소가 생기면 좋겠어요."</p>` });
     return;
   }
   const needs = villageNeeds(id);
@@ -1156,10 +1203,11 @@ function onSunday() {
 }
 
 function openConfession(c) {
-  const hint = confessHint(c), pic = portraitCanvas(c.look).toDataURL();
+  const hint = confessHint(c);
+  // v1.08: 고해소 그림 위, 창살 너머 어두운 얼굴 + 아래 글 상자
   modal({
-    title: '🙏 미사 30분 전 · 고해소',
-    html: `<p class="muted">${pickOne(CONFESS_OPEN)}</p><div class="confess"><div class="grille"><img src="${pic}" alt=""></div><div><div class="who">${c.who}</div><p class="serif">${c.text}</p></div></div>
+    face: faceFor(c.who), faceCls: 'grille', bg: 'confess', who: `🙏 고해소 · ${c.who}`,
+    html: `<p class="serif">${c.text}</p><p class="muted">${pickOne(CONFESS_OPEN)}</p>
       ${hint ? `<p class="small">💡 ${hint} <span class="muted">(친화력이 높아 알아챘어요)</span></p>` : '<p class="muted">무엇이 필요한 분일까요? 말씀을 잘 듣고 골라 보세요. 친화력이 30을 넘으면 알아챌 수 있어요.</p>'}
       <p class="muted">고해 내용은 고해 비밀이라 어디에도 남지 않아요.</p>`,
     // 대답 순서는 매번 섞는다 (맨 끝은 늘 '서둘러 마치기')
@@ -2049,7 +2097,7 @@ function openPlanModal(i = 0) {
   const next = () => { if (p.plans.length) setTimeout(() => openPlanModal(0), 0); };
   if (pl.stage === 'extra') {
     modal({
-      title: '',
+      face: faceForUnit(pl.type), who: `${u.icon} ${u.name}`,
       html: `${head}<p class="serif">"신부님, 준비하다 보니 생각보다 돈이 더 들었어요. 💰${pl.extra}만 조금 더 도와주실 수 있을까요?"</p><p class="muted">이미 💰${pl.paid}를 드렸어요 · 봉헌금 ${Math.floor(p.res.offering)}만 원</p>`,
       options: [
         { label: `🤝 승낙하기 <span class="cost">💰${pl.extra}</span>`, sub: planBlocker(pl.extra) || `<span class="gain">얻음 ${planRewardText(pl, 1.5, def.vital + 5)}</span> · 기대보다 훨씬 풍성한 행사`, disabled: !!planBlocker(pl.extra), onClick: () => { const m = answerExtra(i, true); if (m) { toast(`💸 ${m}`); next(); } } },
@@ -2061,7 +2109,7 @@ function openPlanModal(i = 0) {
   }
   const half = Math.round(base / 2);
   modal({
-    title: '',
+    face: faceForUnit(pl.type), who: `${u.icon} ${u.name}`,
     html: `${head}<p class="serif">"신부님, ${u.name}에서 ${def.name}을 하려고 해요. 지원금 💰${base}을 부탁드려요."</p><p class="muted">봉헌금 ${Math.floor(p.res.offering)}만 원 · 사흘 동안 답이 없으면 행사가 취소돼요${p.plans.length > 1 ? ` · 남은 요청 ${p.plans.length}건` : ''}</p>`,
     options: [
       { label: `💰 전액 지원 <span class="cost">💰${base}</span>`, sub: planBlocker(base) || `<span class="gain">얻음 ${planRewardText(pl, 1, def.vital)}</span><br>⚠️ 준비하다 돈이 더 필요하다고 다시 청할 수도 있어요 (${Math.round(PLAN.extraChance * 100)}%)`, disabled: !!planBlocker(base), onClick: () => { const m = answerPlan(i, 'full'); if (m) { toast(`💸 ${m}`); next(); } } },
@@ -2388,22 +2436,17 @@ document.addEventListener('click', e => {
   const b = e.target.closest('#modal-root [data-qrow]');
   if (b) closeModalThen(() => onQuestTap(b.dataset.qrow));
 });
-// 새 퀘스트: 청한 사람의 그림과 말이 함께 뜬다
+// 새 퀘스트: 청한 사람의 얼굴이 게임 화면 위에 떠오르고, 아래 글 상자에 청하는 말 (v1.08)
 function showQuestRequest(d) {
-  const f = QUEST_FROM[d.id], who = f ? QUEST_WHO[f[0]] : QUEST_WHO.council;
-  const el = document.createElement('div');
-  el.className = 'qdone-bg';
-  el.innerHTML = `<div class="qdone qreq"><div class="qr-img" style="background-image:url('${STORY_IMG(who.img)}')"><span class="qr-who">${who.name}</span></div>
-    <p class="qr-line">“${f ? f[1] : d.desc}”</p>
-    <div class="qr-q"><span class="qc-ic">${d.icon}</span><b>${d.name}</b></div>
-    <div class="qd-rw">${rewardChips(d.reward)}</div>
-    <div class="qr-btns"><button class="qd-btn ghost" data-qr="later">나중에</button><button class="qd-btn" data-qr="go">해 볼게요</button></div></div>`;
-  el.onclick = e => {
-    const b = e.target.closest('[data-qr]');
-    if (e.target === el || b) { Sound.hush(); el.remove(); if (b && b.dataset.qr === 'go') onQuestTap(d.id); }
-  };
-  document.body.appendChild(el);
+  const f = QUEST_FROM[d.id], key = f ? f[0] : 'council', who = QUEST_WHO[key];
   Sound.sfx('quest');
+  modal({
+    face: key, who: who.name, silent: true,
+    html: `<p class="serif">“${f ? f[1] : d.desc}”</p>
+      <div class="qr-q"><span class="qc-ic">${d.icon}</span><b>${d.name}</b></div>
+      <div class="qd-rw">${rewardChips(d.reward)}</div>`,
+    buttons: [{ label: '나중에', cls: 'ghost' }, { label: '해 볼게요', onClick: () => setTimeout(() => onQuestTap(d.id), 0) }],
+  });
   setTimeout(() => Sound.speak(f ? f[1] : d.desc, f ? f[0] : 'council'), 600);
 }
 const BLESS_IMG = { car: 'bless-car', shop: 'bless-shop', anoint: 'bless-anoint', hands: 'bless-hands', items: 'bless-items' };
@@ -2412,12 +2455,14 @@ function openBlessScene(i) {
   const r = blessReqs()[i];
   if (!r) return;
   const b = BLESSINGS.find(x => x.id === r.kind), blk = blessBlocker(i), left = Math.max(0, Math.ceil((r.until - Date.now()) / 1000));
-  Sound.sfx('bless'); setTimeout(() => Sound.speak(r.why, 'faithful'), 500);
-  vnOverlay([{ img: BLESS_IMG[r.kind] || 'bless-items', chap: `${b.icon} ${b.name} 요청`, who: esc(r.who), lines: [r.why, `<span class="vn-who">${fmtDur(left)} 안에${b.urgent ? ' · 급해요' : ''} · 다녀오면 가족이 감사 봉헌을 해요</span>`],
-    choices: [
+  Sound.sfx('bless'); setTimeout(() => Sound.speak(r.why, faceFor(r.who)), 500);
+  // v1.08: 청하는 사람 얼굴 + 아래 글 상자 (다녀온 뒤 장면은 그림 그대로)
+  modal({ face: faceFor(r.who), who: `${b.icon} ${esc(r.who)}`, silent: true,
+    html: `<p class="serif">${r.why}</p><p class="muted">${b.name} 요청 · ${fmtDur(left)} 안에${b.urgent ? ' · 급해요' : ''} · 다녀오면 가족이 감사 봉헌을 해요</p>`,
+    options: [
       { label: `가서 축복한다 ⚡${b.energy}`, sub: blk || '', disabled: !!blk, onClick: () => { const m = doBlessing(i); if (m) setTimeout(() => vnOverlay([{ img: BLESS_IMG[r.kind] || 'bless-items', chap: `${b.icon} ${b.name}`, title: m.title, lines: [m.text, `<span class="vn-who">${m.eff}</span>`], btn: '돌아온다 ▸' }]), 0); } },
       { label: '나중에 가 보겠다', sub: '기한 안에만 가면 돼요' },
-    ] }]);
+    ], buttons: [] });
 }
 
 // 퀘스트 완료 창: 가운데에 보상과 함께 톡 떠오른다
@@ -2499,7 +2544,7 @@ function updatePrompt(t) {
 // ---------- 화면: 타이틀 / 프롤로그 / 보좌 임기 끝 ----------
 
 // ---------- 이야기 화면 (v1.06): 그림이 화면 가득 장면을 보여 주고, 아래 대화창에 글이 한 줄씩, 선택은 아래에 ----------
-const STORY_IMG = n => `assets/story/${n}.webp?v=1`;
+const STORY_IMG = n => `assets/story/${n}.webp?v=2`;
 function vnHtml({ img, chap, dots, title, lines, foot, body, who }) {
   return `<div class="vn" style="background-image:url('${STORY_IMG(img)}')">
     <div class="vn-shade"></div>
@@ -2778,7 +2823,7 @@ function openSettings() {
         <button class="btn small ${s.testMode ? '' : 'ghost'}" id="tm">${s.testMode ? '켜짐' : '꺼짐'}</button></div>
       ${s.testMode ? `<div class="settings-row"><div><b>행동력 가득 채우기</b><div class="muted">테스트용</div></div><button class="btn small ghost" id="fill">채우기</button></div>` : ''}
       <div class="settings-row"><div><b>효과음</b><div class="muted">누르기·거두기·공사·종소리 같은 소리</div></div><button class="btn small ${Sound.pref.sfx ? '' : 'ghost'}" id="snd">${Sound.pref.sfx ? '켜짐' : '꺼짐'}</button></div>
-      <div class="settings-row"><div><b>목소리</b><div class="muted">퀘스트를 청하는 사람·사목회장의 말을 읽어 줘요 (기기의 한국어 음성)</div></div><button class="btn small ${Sound.pref.voice ? '' : 'ghost'}" id="vc">${Sound.pref.voice ? '켜짐' : '꺼짐'}</button></div>
+      <div class="settings-row"><div><b>목소리</b><div class="muted">인물마다 다른 목소리로 말을 읽어 줘요 · 목소리는 AI(Supertonic 3)로 만든 음성이에요</div></div><button class="btn small ${Sound.pref.voice ? '' : 'ghost'}" id="vc">${Sound.pref.voice ? '켜짐' : '꺼짐'}</button></div>
       <div class="settings-row"><div><b>조작법</b><div class="muted">방향키·WASD 이동 · 스페이스/E 상호작용 · 폰은 왼쪽 아래 조이스틱</div></div></div>
       <div class="settings-row"><div><b>처음부터 다시</b><div class="muted">저장된 진행이 지워져요</div></div><button class="btn small ghost" id="rs">초기화</button></div>`,
     buttons: [{ label: '닫기' }],
@@ -2795,7 +2840,7 @@ function openSettings() {
   if (fill) fill.onclick = () => { s.energy = s.energyMax; closeModalThen(); toast('행동력을 채웠어요'); };
   document.getElementById('rs').onclick = () => { closeModalThen(); confirmReset(); };
   document.getElementById('snd').onclick = () => { Sound.pref.sfx = !Sound.pref.sfx; Sound.savePref(); closeModalThen(); openSettings(); };
-  document.getElementById('vc').onclick = () => { Sound.pref.voice = !Sound.pref.voice; Sound.savePref(); if (!Sound.pref.voice) Sound.hush(); else Sound.speak('목소리를 켰어요.', 'clerk'); closeModalThen(); openSettings(); };
+  document.getElementById('vc').onclick = () => { Sound.pref.voice = !Sound.pref.voice; Sound.savePref(); if (!Sound.pref.voice) Sound.hush(); else Sound.speak(QUEST_FROM[Object.keys(QUEST_FROM)[0]][1], QUEST_FROM[Object.keys(QUEST_FROM)[0]][0]); closeModalThen(); openSettings(); };
 }
 
 function confirmReset() {
@@ -2864,7 +2909,7 @@ function onNextChapter() {
 function onCurateDone() {
   const c = Game.state.curate;
   modal({
-    title: `👴 ${c.pastorName} 신부님`,
+    face: 'pastor', title: `👴 ${c.pastorName} 신부님`,
     html: '<p class="serif">"청년회가 이렇게 자리를 잡다니, 수고 많았네. 오늘 교구청에서 연락이 왔어. 자네가 이제 본당 하나를 맡게 되었네."</p>',
     buttons: [{ label: '평가서 받기 →', onClick: () => finishCurate() }],
   });
@@ -2877,7 +2922,7 @@ function onToPastor() {
 }
 
 // ---------- 사목회장과의 대화 (첫 운영 안내) ----------
-// 왼쪽에 사목회장 얼굴과 말, 오른쪽에 주임 신부(나) 얼굴과 대답 버튼
+// v1.08: 게임 화면 위 왼쪽 아래에 사목회장 얼굴, 아래 글 상자에 말과 신부(나)의 대답 버튼
 
 function portraitCanvas(look) {
   const c = document.createElement('canvas');
@@ -2896,17 +2941,17 @@ function startTalk(talk, onDone, img) {
   if (!el) {
     el = document.createElement('div');
     el.id = 'talk';
-    el.innerHTML = `<div class="talk-box">
-      <div class="talk-row c"><div class="pt"></div><div class="talk-bubble"><div class="who">${COUNCIL_NAME}</div><div class="txt"></div></div></div>
-      <div class="talk-row p"><button class="talk-reply"></button><div class="pt"></div></div>
-      <button class="talk-skip">안내 건너뛰기</button></div>`;
+    el.innerHTML = `<div class="say-face"><img src="${FACE_IMG('council')}" alt=""></div>
+      <div class="modal say talk-say"><div class="say-name">${COUNCIL_NAME}</div>
+        <p class="serif txt"></p>
+        <div class="talk-replies"><button class="talk-reply"></button></div>
+        <button class="talk-skip">안내 건너뛰기</button></div>`;
     document.body.appendChild(el);
-    el.querySelector('.talk-row.c .pt').appendChild(portraitCanvas('p1'));
-    el.querySelector('.talk-row.p .pt').appendChild(portraitCanvas('priest'));
     el.querySelector('.talk-reply').onclick = talkNext;
     el.querySelector('.talk-skip').onclick = () => { const p = Game.state.pastor; if (p.tutorial) p.tutorial.step = TUTORIAL.length; endTalk(); toast('안내를 건너뛰었어요. 아래 본당 현황에서 언제든 사목회장을 찾을 수 있어요.'); };
   }
-  el.style.backgroundImage = `url('${STORY_IMG(img || 'talk-yard')}')`;
+  // v1.08: 배경 그림 대신 게임 화면 그대로, 사목회장 얼굴이 떠오른다 (img는 예전 배경 그림 이름 · 이제 쓰지 않음)
+  const face = el.querySelector('.say-face img'); face.style.animation = 'none'; void face.offsetWidth; face.style.animation = '';
   el.hidden = false;
   showTalk();
 }
@@ -2963,7 +3008,7 @@ function tutorialTick() {
 function markHintOption(root) {
   const st = Game.state && Game.state.phase === 'pastor' && tutorialStep();
   if (!st || !st.opts || st.done()) return;
-  const opts = [...root.querySelectorAll('.opt:not(:disabled)')];
+  const opts = [...root.querySelectorAll('.opt:not([aria-disabled])')];
   for (const word of st.opts) {
     const el = opts.find(o => o.textContent.includes(word));
     if (el) { el.classList.add('hint'); el.insertAdjacentHTML('beforeend', '<span class="hint-tag">👆 여기를 누르세요</span>'); return; }
@@ -3345,7 +3390,7 @@ function openTransferModal() {
   }
   const offers = transferOffers(card);
   modal({
-    title: '📜 교구장 주교님의 인사발령',
+    face: 'diocese', who: '교구장 주교님', title: '📜 인사발령',
     html: `<p class="serif">"${p.name}에서 수고 많으셨습니다. 신부님의 사목을 살펴보고 다음 본당을 생각해 보았어요."</p>${reportCardHtml(card)}
       <p class="small">주교님이 제안하신 본당 가운데 원하시는 곳을 말씀드리세요.</p>`,
     options: [

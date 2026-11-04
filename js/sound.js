@@ -1,6 +1,6 @@
-// 성당 키우기: 효과음과 목소리 (v1.06)
+// 성당 키우기: 효과음과 목소리 (v1.06 · 목소리 v1.08)
 // 효과음은 소리 파일 없이 Web Audio로 그 자리에서 만든다 (저작권 걱정 없음, 내려받을 것 없음).
-// 퀘스트를 청하는 사람의 말은 기기의 한국어 음성(speechSynthesis)으로, 사람마다 높낮이·빠르기를 달리해 읽는다.
+// 사람의 말은 미리 녹음한 목소리 파일로 (v1.08, 아래 '목소리').
 // 설정에서 효과음·목소리를 따로 끌 수 있다 (localStorage 'sungdang-sound' = { sfx, voice })
 
 const Sound = (() => {
@@ -65,40 +65,25 @@ const Sound = (() => {
     return sfx('tap');
   }
 
-  // ---------- 목소리 ----------
-  // 사람마다: 높낮이(pitch), 빠르기(rate), 음성 고르기(여자 목소리 선호 여부)
-  const VOICE = {
-    // prefer: 이 이름의 음성이 있으면 먼저 (Apple 기기 한국어 음성), 없으면 남녀로 고른다
-    council: { pitch: 0.9, rate: 0.92, female: false, prefer: ['Grandpa', 'Rocko'] },     // 사목회장: 나이 지긋한 남자 어른
-    clerk: { pitch: 1.1, rate: 1.05, female: true, prefer: ['유나', 'Yuna', 'Flo'] },      // 사무원: 또랑또랑한 여자
-    deanery: { pitch: 1.0, rate: 0.98, female: false, prefer: ['Reed', 'Eddy'] },          // 지구 회의: 중년 신부님
-    vicariate: { pitch: 0.9, rate: 0.9, female: false, prefer: ['Eddy', 'Reed'] },         // 대리구: 점잖고 느린 말투
-    diocese: { pitch: 1.0, rate: 0.9, female: true, prefer: ['Shelley', 'Sandy', '유나'] }, // 교구 공문: 차분한 낭독
-    faithful: { pitch: 1.05, rate: 0.95, female: true, prefer: ['Grandma', 'Sandy'] },     // 교우들: 정겨운 할머니
-    priest: { pitch: 0.95, rate: 1.0, female: false, prefer: ['Reed'] },
-  };
-  let voices = [];
-  const loadVoices = () => { try { voices = speechSynthesis.getVoices().filter(v => /^ko/i.test(v.lang)); } catch (e) { voices = []; } };
-  if ('speechSynthesis' in window) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
-  const FEMALE = /yuna|sora|seoyeon|jiyoung|heami|female|여|유나|나라/i, MALE = /minsu|jian|injoon|hyunsu|male|남|민수|지안/i;
-  function pickVoice(female, prefer) {
-    if (!voices.length) loadVoices();
-    if (!voices.length) return null;
-    for (const n of prefer || []) { const v = voices.find(x => x.name.startsWith(n)); if (v) return v; }
-    return voices.find(v => (female ? FEMALE : MALE).test(v.name)) || (female ? voices[0] : voices[voices.length - 1]);
+  // ---------- 목소리 (v1.08) ----------
+  // 정해진 대사는 Supertonic 3(무료 기기 안 TTS)으로 사람마다 다른 목소리로 미리 녹음해 두었다 (tools/make-voice.py).
+  // assets/voice/<해시>.mp3, 해시 = FNV-1a("얼굴|글"). 녹음이 없는 말(숫자가 바뀌는 말 등)은 기계음 대신 읽지 않는다.
+  let voiceIdx = null, cur = null;
+  fetch('assets/voice/index.json?v=1').then(r => r.json()).then(a => { voiceIdx = new Set(a); }).catch(() => { voiceIdx = new Set(); });
+  const plainOf = t => String(t).replace(/<[^>]+>/g, '').replace(/[“”"]/g, '').trim();
+  function voiceKey(face, text) {
+    let h = 0x811c9dc5;
+    for (const b of new TextEncoder().encode(`${face}|${plainOf(text)}`)) { h ^= b; h = Math.imul(h, 0x01000193) >>> 0; }
+    return h.toString(16).padStart(8, '0');
   }
-  function speak(text, who = 'council') {
-    if (!pref.voice || !('speechSynthesis' in window)) return;
-    const plain = String(text).replace(/<[^>]+>/g, '').replace(/[“”"]/g, '').trim();
-    if (!plain) return;
-    try {
-      speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(plain), c = VOICE[who] || VOICE.council, v = pickVoice(c.female, c.prefer);
-      u.lang = 'ko-KR'; if (v) u.voice = v; u.pitch = c.pitch; u.rate = c.rate; u.volume = 0.9;
-      speechSynthesis.speak(u);
-    } catch (e) { /* 음성이 없는 기기 */ }
+  function speak(text, face = 'council') {
+    if (!pref.voice || !voiceIdx) return;
+    const k = voiceKey(face, text);
+    if (!voiceIdx.has(k)) return;
+    hush();
+    try { cur = new Audio(`assets/voice/${k}.mp3`); cur.volume = 0.95; const pr = cur.play(); if (pr) pr.catch(() => {}); } catch (e) { /* 소리를 못 내는 기기 */ }
   }
-  function hush() { try { if ('speechSynthesis' in window) speechSynthesis.cancel(); } catch (e) { /* 무시 */ } }
+  function hush() { if (cur) { try { cur.pause(); } catch (e) { /* 무시 */ } cur = null; } }
 
   return { sfx, sfxForText, speak, hush, pref, savePref };
 })();

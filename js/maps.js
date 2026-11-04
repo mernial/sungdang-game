@@ -96,13 +96,13 @@ const MAPS = {
 // regions: 넓혀야 들어갈 수 있는 마을. 잠겨 있으면 안개로 덮이고 막힌다
 MAPS.solmoe = {
   name: '솔뫼 본당',
-  w: 30, h: 34,             // 아래쪽 y 24~33은 이웃 동네(면 소재지)
+  w: 30, h: 34,             // 아래쪽 y 24~27은 살 수 있는 밭·논(v1.08), y 28~33은 이웃 동네(면 소재지)
   spawn: [9.5, 7.5],
   overview: true,          // 캐릭터 없이 멀리서 바라본다
   viewCenter: [9, 8],      // 처음 바라보는 곳
   viewWidth: 130,          // 처음 화면에 들어오게 할 월드 너비(픽셀, 두 배 칸으로 늘린 뒤 260: 핸드폰 1.5배, 컴퓨터 3배). v0.81: 사람이 크게 보이게 가까이
   eventSpot: [10.5, 6.8],
-  paths: [[0, 27, 30, 1], [14, 24, 2, 10]],  // 본당 땅의 길은 신부가 직접 놓는다 (p.paths). 이건 이웃 동네의 길
+  paths: [[0, 28, 30, 1], [14, 28, 2, 6]],  // 본당 땅의 길은 신부가 직접 놓는다 (p.paths). 이건 이웃 동네의 길
   fixed: [
     { id: 'church', label: '솔뫼 성당', x: 7, y: 1, w: 4, d: 5, style: 'church', door: { side: 'S', u: 0.5 }, menu: 'church' },
     { id: 'rectory', label: '사제관', x: 15, y: 1, w: 2, d: 2, h: 18, style: 'house', door: { side: 'S', u: 0.5 }, menu: 'rectory' },
@@ -122,15 +122,12 @@ MAPS.solmoe = {
     { id: 'v1b', x: 24, y: 11, region: 'v1' },
     { id: 'v1c', x: 22, y: 17, region: 'v1' },
   ],
-  regions: [{ id: 'v1', x: 21, y: 0, w: 9, h: 24 }, { id: 'town', x: 0, y: 24, w: 30, h: 10, town: true }],
-  // 이웃 동네 건물: 다른 종교 공동체와 마을회관, 집들 (누르면 신자 수와 이야기)
+  regions: [{ id: 'v1', x: 21, y: 0, w: 9, h: 24 }, { id: 'town', x: 0, y: 28, w: 30, h: 6, town: true }],
+  // 이웃 동네 건물: 마을회관과 집들 (v1.08: 사용자 요청으로 다른 종교 건물은 지도에서 뺐다. 종교 현황은 마을회관에서)
   town: [
-    { id: 't_church', label: '솔뫼교회', x: 3, y: 24, w: 3, d: 3, h: 20, style: 'chapel', cross: true, door: { side: 'S', u: 0.5 }, menu: 'religion', religion: 'protestant' },
-    { id: 't_temple', label: '운곡사', x: 21, y: 24, w: 3, d: 4, h: 15, style: 'temple', door: { side: 'S', u: 0.5 }, menu: 'religion', religion: 'buddhist' },
-    { id: 't_won', label: '원불교 솔뫼교당', x: 8, y: 29, w: 2, d: 3, h: 13, style: 'wonhall', door: { side: 'S', u: 0.5 }, menu: 'religion', religion: 'won' },
     { id: 't_hall', label: '마을회관', x: 17, y: 29, w: 2, d: 3, h: 14, style: 'office', door: { side: 'S', u: 0.5 }, menu: 'townhall' },
-    { id: 't_h1', label: '동네 집', x: 10, y: 24, w: 2, d: 2, h: 12, style: 'cottage', door: { side: 'S', u: 0.5 } },
-    { id: 't_h2', label: '동네 집', x: 27, y: 24, w: 2, d: 2, h: 12, style: 'house', door: { side: 'S', u: 0.5 } },
+    { id: 't_h1', label: '동네 집', x: 8, y: 29, w: 2, d: 2, h: 12, style: 'cottage', door: { side: 'S', u: 0.5 } },
+    { id: 't_h2', label: '동네 집', x: 21, y: 31, w: 2, d: 2, h: 12, style: 'house', door: { side: 'S', u: 0.5 } },
     { id: 't_h3', label: '동네 가게', x: 0, y: 29, w: 2, d: 2, h: 12, style: 'brick', door: { side: 'S', u: 0.5 } },
     { id: 't_h4', label: '동네 집', x: 24, y: 29, w: 2, d: 2, h: 12, style: 'cottage', door: { side: 'S', u: 0.5 } },
     { id: 't_h5', label: '동네 집', x: 4, y: 31, w: 2, d: 2, h: 12, style: 'house', door: { side: 'S', u: 0.5 } },
@@ -138,7 +135,7 @@ MAPS.solmoe = {
   ],
   statues: [[6, 6]],
   trees: [[0, 0], [4, 0], [13, 0], [19, 0], [0, 4], [4, 4], [19, 4], [0, 9], [4, 9], [19, 7], [0, 15], [4, 15], [8, 14], [15, 15], [19, 14], [0, 22], [3, 22], [8, 22], [14, 22], [19, 21], [19, 17],
-    [7, 25], [17, 25], [12, 31], [20, 32], [1, 33], [26, 33], [6, 28], [23, 28],
+    [12, 31], [20, 32], [1, 33], [26, 33],
     [21, 0], [26, 0], [29, 0], [21, 3], [29, 3], [25, 8], [29, 8], [21, 13], [28, 11], [21, 21], [25, 21], [29, 21], [26, 18], [29, 13]],
   npcs: [
     { id: 'council', name: '사목회장', look: 'p1', home: [12.5, 7.4], radius: 1.2, menu: 'council' },

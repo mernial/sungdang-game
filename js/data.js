@@ -1890,12 +1890,14 @@ const QUIT_HINT = { tired: '혼자 짐을 너무 많이 진 것 같아요', conf
 // heart: 마음 목표 +, rep: 평판 목표 +, church: 만들 수 있는 성당 레벨, lent/may: 그 시기 주일에 더 오르는 마음
 // ---------- 본당 부지 (v0.70): 처음엔 성당 둘레 땅만, 나머지는 사서 넓힌다 ----------
 // 본당 땅(마을·이웃 동네 밖)을 구획으로 나눈다. 산 구획 안에서만 짓고, 치우고, 길을 놓는다.
-const LOTS = [
+const LOTS = [  // farm: 아직 안 산 땅의 모습 (v1.08 사용자 "밭이나 논을 사서 성당 부지를 넓혀 가게") field 밭 · paddy 논
   { id: 'home', name: '성당 앞마당', x: 6, y: 0, w: 15, h: 10, cost: 0, church: 1, desc: '성당·사제관·사무실이 선 본당 땅' },
-  { id: 'west', name: '서쪽 텃밭', x: 0, y: 0, w: 6, h: 10, cost: 60, church: 2, desc: '성당 서쪽의 묵은 텃밭. 박 씨 댁이 붙어 있어요' },
-  { id: 'south', name: '앞 공터', x: 6, y: 10, w: 15, h: 7, cost: 100, church: 2, desc: '성당 앞 너른 공터. 교리실을 여럿 놓을 수 있어요' },
-  { id: 'southwest', name: '서남쪽 언덕', x: 0, y: 10, w: 6, h: 7, cost: 180, church: 4, desc: '나지막한 언덕배기. 최 씨 댁이 있어요' },
-  { id: 'far', name: '아랫마을 들판', x: 0, y: 17, w: 21, h: 7, cost: 320, church: 6, desc: '이웃 동네와 맞닿은 넓은 들판. 교우 가정 두 집이 있어요' },
+  { id: 'west', name: '서쪽 텃밭', farm: 'field', x: 0, y: 0, w: 6, h: 10, cost: 60, church: 2, desc: '성당 서쪽 박 씨네 텃밭. 박 씨 댁이 붙어 있어요' },
+  { id: 'south', name: '앞 콩밭', farm: 'field', x: 6, y: 10, w: 15, h: 7, cost: 100, church: 2, desc: '성당 앞 너른 콩밭. 사면 교리실을 여럿 놓을 수 있어요' },
+  { id: 'southwest', name: '언덕배기 고추밭', farm: 'field', x: 0, y: 10, w: 6, h: 7, cost: 180, church: 4, desc: '나지막한 언덕의 고추밭. 최 씨 댁이 있어요' },
+  { id: 'far', name: '아랫마을 논', farm: 'paddy', x: 0, y: 17, w: 21, h: 7, cost: 320, church: 6, desc: '이웃 동네와 맞닿은 넓은 논. 교우 가정 두 집이 있어요' },
+  { id: 'field2', name: '신작로 옆 배추밭', farm: 'field', x: 0, y: 24, w: 10, h: 4, cost: 450, church: 7, desc: '면 소재지로 가는 길가 배추밭. 사면 본당이 길까지 닿아요' },
+  { id: 'paddy2', name: '큰 논', farm: 'paddy', x: 10, y: 24, w: 20, h: 4, cost: 600, church: 8, desc: '마을에서 제일 넓은 논. 다 사면 본당 땅이 면 소재지 앞까지 이어져요' },
 ];
 // v0.80: 지도를 두 배 칸으로 나눴다 (maps.js MAP_GRID)
 for (const l of LOTS) { l.x *= 2; l.y *= 2; l.w *= 2; l.h *= 2; }

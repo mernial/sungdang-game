@@ -421,7 +421,7 @@ body.in-world #prompt:not([hidden]) { display: block; }
 /* 메뉴 선택지 */
 .modal .opt { display: flex; flex-direction: column; gap: 1px; }
 .modal .opt .sub { font-size: 12px; color: var(--muted); font-weight: 400; }
-.modal .opt:disabled { opacity: .5; cursor: not-allowed; }
+.modal .opt:disabled, .modal .opt[aria-disabled] { opacity: .5; cursor: not-allowed; }
 .modal .opt .cost { color: var(--energy); font-weight: 700; font-size: 13px; margin-left: 4px; }
 .modal .opt .num {
   display: inline-block;
@@ -827,7 +827,7 @@ body.overview .modal .opt {
   transition: transform .06s, box-shadow .06s;
 }
 body.overview .modal .opt:active { transform: translateY(3px); box-shadow: 0 0 0 #e6d3b2, 0 2px 6px rgba(90, 60, 30, .08); }
-body.overview .modal .opt:disabled { background: #f3ebdd; box-shadow: none; }
+body.overview .modal .opt:disabled, body.overview .modal .opt[aria-disabled] { background: #f3ebdd; box-shadow: none; }
 body.overview .modal .opt.tile { background: linear-gradient(180deg, #ffffff 0%, #fbf2e1 100%); border-radius: 18px; padding: 12px 4px 10px; }
 body.overview .modal .opt.tile .t-icon { filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .15)); }
 body.overview .modal .opt .num { background: #f3e6cf; color: #8a7765; border-radius: 6px; padding: 0 5px; margin-right: 6px; text-align: center; }
@@ -1005,8 +1005,8 @@ body:has(#app .vn) #app { max-width: none; padding: 0; }
 @keyframes vn-blink { 50% { opacity: .35; } }
 
 /* v1.06 사목회장과의 대화: 장면 그림을 화면 가득, 아래 대화창 (이야기 화면과 같은 모양) */
-#talk { background: #2b2018 center / cover no-repeat; padding: 0 14px calc(14px + env(safe-area-inset-bottom)); }
-#talk::before { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(20,12,6,.15) 0%, rgba(20,12,6,0) 40%, rgba(20,12,6,.45) 100%); pointer-events: none; }
+#talk { background: linear-gradient(180deg, rgba(20, 12, 8, 0) 35%, rgba(20, 12, 8, .38) 100%) !important; padding: 0; flex-direction: column; align-items: center; justify-content: flex-end; }
+
 #talk .talk-box { width: min(680px, 100%); gap: 10px; }
 #talk .talk-row .pt { display: none; }
 #talk .talk-bubble { position: relative; padding: 20px 18px 14px; border: 2px solid rgba(255,255,255,.9); border-radius: 22px; background: linear-gradient(180deg, rgba(255,253,248,.96) 0%, rgba(248,238,219,.96) 100%); box-shadow: 0 6px 0 rgba(226,207,174,.9), 0 16px 40px rgba(20,10,4,.45); color: #3b2b20; font-size: 15.5px; line-height: 1.65; }
@@ -1058,3 +1058,30 @@ body:has(#app .vn) #app { max-width: none; padding: 0; }
 .shop-hero span { position: absolute; left: 10px; bottom: 8px; padding: 3px 10px; border-radius: 999px; background: rgba(255, 250, 238, .92); color: #5a4126; font-weight: 700; font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
 .shop-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .shop-duo .shop-hero { height: 104px; }
+
+/* v1.08 대화 모양 창: 게임 화면은 그대로, 왼쪽 아래에 말하는 사람 얼굴, 아래에 글 상자 */
+.modal-bg.say-bg, body.overview .modal-bg.say-bg { align-items: flex-end; flex-direction: column; justify-content: flex-end; background: linear-gradient(180deg, rgba(20, 12, 8, 0) 35%, rgba(20, 12, 8, .38) 100%); }
+.say-face { position: relative; align-self: center; width: min(760px, calc(100% - 20px)); height: 0; pointer-events: none; z-index: 1; }
+.say-face img { position: absolute; left: 6px; bottom: -14px; height: min(300px, 36vh); width: auto; filter: drop-shadow(0 6px 14px rgba(20, 10, 4, .35)); animation: say-in .35s ease-out; }
+.say-face.grille img { filter: drop-shadow(0 6px 14px rgba(20, 10, 4, .35)) brightness(.55) blur(1.5px); }
+.say-face.grille::after { content: ''; position: absolute; left: 6px; bottom: -14px; width: calc(min(300px, 36vh) * .82); height: min(300px, 36vh); background: repeating-linear-gradient(45deg, rgba(60, 38, 20, .85) 0 3px, transparent 3px 14px), repeating-linear-gradient(-45deg, rgba(60, 38, 20, .85) 0 3px, transparent 3px 14px); border-radius: 50% 50% 8px 8px; }
+@keyframes say-in { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+.modal.say, body.overview .modal.say { position: relative; z-index: 2; align-self: center; width: min(760px, calc(100% - 20px)); max-width: none; max-height: 56vh; margin-bottom: calc(10px + env(safe-area-inset-bottom)); padding: 24px 18px 14px; border-radius: 20px; background: linear-gradient(180deg, rgba(255, 253, 248, .97) 0%, rgba(248, 238, 219, .97) 100%); border: 2px solid rgba(255, 255, 255, .9); box-shadow: 0 6px 0 rgba(226, 207, 174, .9), 0 16px 40px rgba(20, 10, 4, .4); color: #3b2b20; overflow: visible; display: flex; flex-direction: column; }
+.modal.say > .m-head, .modal.say > .tiles, .modal.say > .opt-rows { overflow-y: auto; }
+.modal.say > .m-head { flex: 0 1 auto; min-height: 0; }
+.modal.say .say-name { position: absolute; left: 18px; top: -15px; z-index: 3; padding: 4px 14px; border-radius: 999px; background: linear-gradient(180deg, #ad5038, #84301f); color: #fff; font-weight: 800; font-size: 13px; box-shadow: 0 3px 0 #5e2116; white-space: nowrap; max-width: calc(100% - 70px); overflow: hidden; text-overflow: ellipsis; }
+.modal.say h2 { font-size: 15px; margin: 0 0 4px; color: #7b4a2a; }
+.modal.say .serif, .modal.say .m-desc > p:first-child { font-size: 15.5px; line-height: 1.65; }
+.modal.say .m-close { top: 8px; right: 8px; }
+.modal.say .opt { background: rgba(255, 255, 255, .7); color: #3b2b20; border-color: #e3d3b6; }
+.modal.say .opt .sub { color: #7a6a5a; }
+.modal.say .btn-row { margin-top: 10px; flex-direction: row; justify-content: flex-end; flex-wrap: wrap; }
+.modal.say .btn-row .btn { flex: 0 1 auto; min-width: 96px; }
+@media (max-width: 520px) {
+  .say-face img { height: min(210px, 28vh); }
+  .say-face.grille::after { width: calc(min(210px, 28vh) * .82); height: min(210px, 28vh); }
+}
+#talk .modal.say { animation: up .25s ease-out; }
+#talk .txt { animation: vn-line .4s ease-out; margin: 0 0 10px; }
+#talk .talk-replies { display: flex; }
+.modal.say .serif { text-align: left; }

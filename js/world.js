@@ -630,7 +630,55 @@ function worldResize() {
 const GROUND_CS = 512, GROUND_CHUNKS = new Map();
 function groundSig(m) {
   const p = Game.state.pastor, paths = (p && p.paths) ? Object.keys(p.paths) : [];
-  return `${m.w}x${m.h}|${paths.length}|${paths.join(';')}|${World.lockedTiles.size}|${World.pathSet.size}`;
+  const lots = p && m === MAPS.solmoe && typeof lotsOwned === 'function' ? Object.keys(lotsOwned()).sort().join(',') : '';
+  return `${m.w}x${m.h}|${paths.length}|${paths.join(';')}|${World.lockedTiles.size}|${World.pathSet.size}|${lots}`;
+}
+// 흙밭 가면: 칸마다 한 점, 흙이 땅의 60%쯤 (가장자리는 부드럽게)
+function dirtMask(m) {
+  if (World.dirtCanvas && World.dirtFor === m) return World.dirtCanvas;
+  const c = document.createElement('canvas'); c.width = m.w; c.height = m.h;
+  const g = c.getContext('2d'), img = g.createImageData(m.w, m.h);
+  const h = (x, y, s) => typeof natHash === 'function' ? natHash(x, y, s) : 0.5;
+  const vn = (x, y, cell, s) => { const gx = x / cell, gy = y / cell, x0 = Math.floor(gx), y0 = Math.floor(gy), fx = gx - x0, fy = gy - y0, sm = t => t * t * (3 - 2 * t);
+    const a = h(x0, y0, s), b = h(x0 + 1, y0, s), c2 = h(x0, y0 + 1, s), d = h(x0 + 1, y0 + 1, s), u = sm(fx), v = sm(fy);
+    return a + (b - a) * u + (c2 - a) * v + (a - b - c2 + d) * u * v; };
+  for (let y = 0; y < m.h; y++) for (let x = 0; x < m.w; x++) {
+    const n = vn(x, y, 7, 53) * 0.7 + vn(x, y, 3, 59) * 0.3, i = (y * m.w + x) * 4;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = 255; img.data[i + 3] = Math.max(0, Math.min(255, (n - 0.34) * 1400));
+  }
+  g.putImageData(img, 0, 0);
+  World.dirtCanvas = c; World.dirtFor = m;
+  return c;
+}
+// 밭: 갈아엎은 흙에 이랑과 푸른 작물 줄 / 논: 물 댄 논에 모 포기와 논두렁 (바닥 무늬 좌표, 한 칸 = P)
+function drawFarm(g, l, P) {
+  const x0 = l.x * P, y0 = l.y * P, w = l.w * P, h = l.h * P, hs = (a, b) => typeof natHash === 'function' ? natHash(a, b, 71) : 0.5;
+  g.save(); g.beginPath(); g.rect(x0, y0, w, h); g.clip();
+  if (l.farm === 'paddy') {
+    g.fillStyle = '#7f9a6a'; g.fillRect(x0, y0, w, h);
+    const cell = 4 * P; // 논 한 배미 = 4칸
+    for (let by = y0; by < y0 + h; by += cell) for (let bx = x0; bx < x0 + w; bx += cell) {
+      const t = hs(bx / P, by / P);
+      g.fillStyle = t < 0.5 ? '#86a874' : '#93ad6c'; g.fillRect(bx + 10, by + 10, cell - 20, cell - 20);
+      g.fillStyle = 'rgba(190,215,220,.35)'; g.fillRect(bx + 14, by + 14, cell - 28, cell - 28); // 물 비침
+      g.fillStyle = '#4f7d33'; // 모 포기
+      for (let yy = by + 34; yy < by + cell - 20; yy += 44) for (let xx = bx + 30; xx < bx + cell - 20; xx += 40) { g.beginPath(); g.ellipse(xx, yy, 9, 13, 0, 0, Math.PI * 2); g.fill(); }
+    }
+    g.strokeStyle = '#8b6a43'; g.lineWidth = 18; // 논두렁
+    for (let by = y0; by <= y0 + h; by += cell) { g.beginPath(); g.moveTo(x0, by); g.lineTo(x0 + w, by); g.stroke(); }
+    for (let bx = x0; bx <= x0 + w; bx += cell) { g.beginPath(); g.moveTo(bx, y0); g.lineTo(bx, y0 + h); g.stroke(); }
+  } else {
+    g.fillStyle = '#8a6440'; g.fillRect(x0, y0, w, h);
+    const row = 0.5 * P;
+    for (let yy = y0, k = 0; yy < y0 + h; yy += row, k++) {
+      g.fillStyle = k % 2 ? '#6f4f31' : '#9a7350'; g.fillRect(x0, yy, w, row * 0.5); // 이랑·고랑
+      if (k % 2) continue;
+      g.fillStyle = l.id === 'southwest' ? '#3f7a2c' : '#5d9a3c';
+      for (let xx = x0 + 24; xx < x0 + w; xx += 38) { const r = 10 + hs(xx / P, yy / P) * 6; g.beginPath(); g.arc(xx, yy + row * 0.25, r, 0, Math.PI * 2); g.fill(); }
+      if (l.id === 'southwest') { g.fillStyle = '#c23b2a'; for (let xx = x0 + 34; xx < x0 + w; xx += 76) { g.beginPath(); g.arc(xx, yy + row * 0.34, 4, 0, Math.PI * 2); g.fill(); } } // 고추
+    }
+  }
+  g.restore();
 }
 function renderGroundChunk(m, gtex, dtex, res, i, j) {
   const CS = GROUND_CS, c = document.createElement('canvas'); c.width = c.height = CS;
@@ -642,6 +690,16 @@ function renderGroundChunk(m, gtex, dtex, res, i, j) {
   g.fillStyle = g.createPattern(gtex, 'repeat'); g.fillRect(0, 0, m.w * P, m.h * P);
   // 큰 얼룩: 짙은 풀밭·마른 풀밭이 넓게 번지게 (칸마다 한 점인 작은 그림을 부드럽게 늘린다)
   g.drawImage(groundTint(m), 0, 0, m.w * P, m.h * P);
+  // 흙밭 (v1.08 사용자 "풀밭보다 흙밭이 조금 더 많게"): 잡음 가면으로 흙 무늬를 땅의 절반 넘게 덮는다
+  if (dtex) {
+    const t = document.createElement('canvas'); t.width = t.height = CS;
+    const tg = t.getContext('2d'); tg.setTransform(g.getTransform()); tg.imageSmoothingEnabled = true;
+    tg.fillStyle = tg.createPattern(dtex, 'repeat'); tg.fillRect(0, 0, m.w * P, m.h * P);
+    tg.globalCompositeOperation = 'destination-in'; tg.drawImage(dirtMask(m), 0, 0, m.w * P, m.h * P);
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(t, 0, 0); g.restore();
+  }
+  // 아직 안 산 본당 땅: 마을 사람들의 밭·논 (v1.08)
+  if (m === MAPS.solmoe && Game.state.pastor && typeof lotsOwned === 'function') for (const l of LOTS) if (l.farm && !lotsOwned()[l.id]) drawFarm(g, l, P);
   // 흙길: 놓은 길과 이웃 동네 길
   if (dtex) {
     g.beginPath();
@@ -700,7 +758,7 @@ function worldDraw() {
   const lotLabels = [];
   if (World.overview && m === MAPS.solmoe && Game.state.pastor) for (const l of LOTS) {
     if (lotOwnedAt(l.x, l.y)) continue;
-    poly(ctx, [iso(l.x, l.y), iso(l.x + l.w, l.y), iso(l.x + l.w, l.y + l.h), iso(l.x, l.y + l.h)], 'rgba(46,38,24,.32)');
+    poly(ctx, [iso(l.x, l.y), iso(l.x + l.w, l.y), iso(l.x + l.w, l.y + l.h), iso(l.x, l.y + l.h)], l.farm ? 'rgba(46,38,24,.10)' : 'rgba(46,38,24,.32)');
     const block = lotBlocker(l.id);
     lotLabels.push([l.x + l.w / 2, l.y + l.h / 2, `🏞️ ${l.name} · ${block && block.startsWith('성당') ? '🔒 ' + block : '💰' + lotCost(l) + ' · 눌러서 땅 사기'}`]);
   }
@@ -768,6 +826,7 @@ function worldDraw() {
   const offX = -camX - 40, offX2 = World.vw - camX + 40, offY = -camY - 40, offY2 = World.vh - camY + 200;
   if (World.overview && m.obstacles) for (const o of m.obstacles()) {
     if (o.type !== 'tree' && regionLocked(m.regionAt(o.x, o.y))) continue;
+    if (o.type !== 'tree' && o.type !== 'house' && m === MAPS.solmoe && Game.state.pastor && (l => l && l.farm && !lotsOwned()[l.id])(lotAt(o.x, o.y))) continue; // 남의 밭·논 위 잡초·돌은 사고 나서 보인다
     const ox1 = iso(o.x, o.y + o.d)[0], ox2 = iso(o.x + o.w, o.y)[0], oy1 = iso(o.x, o.y)[1], oy2 = iso(o.x + o.w, o.y + o.d)[1];
     if (ox2 < offX || ox1 > offX2 || oy2 < offY || oy1 > offY2) continue;
     objs.push({ box: [o.x + 0.1, o.y + 0.1, o.x + o.w - 0.1, o.y + o.d - 0.1], draw: () => {
