@@ -1040,7 +1040,7 @@ function openCouncilMenu() {
       { tile: true, label: '📊 현황과 목표', onClick: () => setTimeout(openCouncil, 0) },
       // v1.08 사용자 "전체 교구 본당 보기란은 만들되 비활성화": 수원교구 다른 본당을 큰 지도로 보는 칸 (아직 준비 중)
       { tile: true, label: '🗺️ 전체 교구 본당 보기', tileSub: '준비 중', sub: '수원교구의 다른 본당들을 큰 지도로 둘러보는 곳이에요 · 아직 준비 중이에요', disabled: true },
-      { tile: true, label: '📜 본당 성적표', tileSub: p.transfer ? (transferReady() ? '인사발령 공문이 왔어요' : `발령까지 ${transferWeeksLeft()}주일`) : transferNeedLabel(), onClick: () => setTimeout(openTransferModal, 0) },
+      { tile: true, label: '📜 본당 성적표', tileSub: p.transfer ? (bishopCallDue() ? '📞 주교님 전화' : transferReady() ? '인사발령 공문이 왔어요' : `발령까지 ${transferWeeksLeft()}주일`) : transferNeedLabel(), onClick: () => setTimeout(openTransferModal, 0) },
       { tile: true, label: '📅 사목 방향', tileSub: direction() ? `${direction().icon} ${direction().name}` : '이번 달 정하기', onClick: () => setTimeout(openDirectionModal, 0) },
       { tile: true, label: '💼 지출 기준', tileSub: '행사 지원금', onClick: () => setTimeout(openPolicyModal, 0) },
       { tile: true, label: '💰 단체별 지원', tileSub: '활동비 많이·보통·적게', onClick: () => setTimeout(openBudgetModal, 0) },
@@ -2374,7 +2374,7 @@ function questTasks() {
   if (p.week > 0 && !direction()) out.push({ icon: '📅', text: '이번 달 사목 방향', attr: ' data-direction="1"', hl: true, pri: 7 });
   if (isAway()) out.push({ icon: awayDef().icon, text: `${awayDef().name} 중 · ${fmtDur(Math.ceil((p.away.until - Date.now()) / 1000))} 뒤 돌아와요`, attr: go('b:office'), pri: 9 });
   else { const tl = todayLits(); if (tl.length) out.push({ icon: '🗓️', text: `${WEEK_DAYS[weekDay()]}요일 · ${tl[0].time} ${tl[0].name.replace(/^\S+요일 /, '')}${tl.length > 1 ? ` 외 ${tl.length - 1}` : ''}`, attr: go('b:church'), hl: true, pri: 7 }); }
-  if (p.transfer) out.push(transferReady() ? { icon: '📜', text: '인사발령 공문', attr: ' data-transfer="1"', hl: true, pri: 10 } : { icon: '📜', text: `인사발령까지 ${transferWeeksLeft()}주일`, attr: ' data-transfer="1"', pri: 4 });
+  if (p.transfer) out.push(bishopCallDue() ? { icon: '📞', text: '주교님 전화', attr: ' data-transfer="1"', hl: true, pri: 10 } : transferReady() ? { icon: '📜', text: '인사발령 공문', attr: ' data-transfer="1"', hl: true, pri: 10 } : { icon: '📜', text: `인사발령까지 ${transferWeeksLeft()}주일`, attr: ' data-transfer="1"', pri: 4 });
   const readyOrg = ORG.filter(orgReady);
   if (readyOrg.length) out.push({ icon: '👔', text: `${readyOrg[0].name} 선임 가능`, attr: ' data-org="1"', hl: true, pri: 7 });
   if ((p.plans || []).length) out.push({ icon: '💸', text: `행사 지원 요청 ${p.plans.length}건`, attr: ' data-plan="1"', hl: true, pri: p.plans.some(x => x.age >= 2) ? 8 : 6 });
@@ -2454,7 +2454,7 @@ function openQuestModal() {
   modal({
     title: `📜 퀘스트 <span class="qc-n">${act.length}</span>`,
     html: `<div class="qm-list">${act.map(card).join('') || '<p class="muted">지금은 걸린 퀘스트가 없어요.</p>'}</div>
-      <p class="qm-foot">${p.transfer ? `📜 인사발령까지 ${transferWeeksLeft()}주일` : questState().next < FIRST_QUESTS.length ? `⏳ 다음 퀘스트 ${wait ? fmtDur(wait) + ' 뒤' : '곧'}` : '📜 남은 퀘스트를 마치면 인사발령 공문이 와요'}</p>`,
+      <p class="qm-foot">${bishopCallDue() ? "📞 주교님께서 전화하셨어요" : p.transfer ? `📜 인사발령까지 ${transferWeeksLeft()}주일` : questState().next < FIRST_QUESTS.length ? `⏳ 다음 퀘스트 ${wait ? fmtDur(wait) + ' 뒤' : '곧'}` : '📜 남은 퀘스트를 마치면 인사발령 공문이 와요'}</p>`,
     buttons: [{ label: '닫기', cls: 'ghost' }],
   });
 }
@@ -3366,6 +3366,7 @@ function boot() {
       const t = tickParish();
       for (const d of t.done) { Sound.sfx('done'); toast(`🏗️ ${d}`, true); }
       if (t.quests && t.quests.length) { showQuestRequest(t.quests[t.quests.length - 1]); save(); }
+      if (bishopCallDue() && !UI.modalOpen && !(s.pastor.transfer.rang === s.pastor.week)) { s.pastor.transfer.rang = s.pastor.week; Sound.sfx('open'); openBishopCall(); }
       if (t.applicants) { toast(`📨 채용 공고를 보고 지원자 ${t.applicants}명이 찾아왔어요! 사무실에서 만나 보세요`); save(); }
       if (t.dayLines && t.dayLines.length) toast(`🌅 새 날이 밝았어요. ${t.dayLines[0]}`);
       if (t.done.length || (t.dayLines && t.dayLines.length)) { save(); syncWorldLayout(); }
@@ -3403,8 +3404,28 @@ function parishCardSub(id) {
   return `${d.desc}<br>👥 ${st.members}명 · 💰${st.offering} · ❤️${st.heart} · ⛪ 성당 Lv${st.church}에서 시작`;
 }
 
+// 인사발령 시즌 주교님 전화: 안부를 물으시면 신부가 이동이나 조금 더 머물기를 청한다
+function openBishopCall() {
+  const p = Game.state.pastor, t = p.transfer, weeks = t.notice || TRANSFER.weeks;
+  const ask = t.stayed ? BISHOP_CALL.again : questRun(p) ? BISHOP_CALL.first : BISHOP_CALL.other;
+  const reply = (go) => setTimeout(() => {
+    answerBishop(go); save(); render();
+    modal({ face: 'diocese', who: '교구장 주교님 · 📞 전화', title: '📞 주교님 전화', html: `<p class="serif">"${go ? BISHOP_CALL.go : BISHOP_CALL.stay}"</p>
+      <p class="muted">${go ? `${weeks}주일 뒤 인사발령 공문이 와요. 그동안 본당을 잘 정리하고 성적을 올려 보세요.` : `임기가 ${TRANSFER.stayWeeks}주일 늘었어요. 끝나기 ${weeks}주일 전에 주교님께서 다시 전화하세요.`}</p>` });
+  }, 0);
+  modal({
+    face: 'diocese', who: '교구장 주교님 · 📞 전화', title: '📞 주교님 전화',
+    html: `<p class="serif">"${ask}"</p><p class="muted">주교님께 말씀드려요</p>`,
+    options: [
+      { label: `🙏 "${BISHOP_CALL.replyGo}"`, sub: `이동해요 · ${weeks}주일 뒤 성적표를 보고 다음 본당이 정해져요`, onClick: () => reply(true) },
+      { label: `⛪ "${BISHOP_CALL.replyStay}"`, sub: `임기가 ${TRANSFER.stayWeeks}주일 늘어요 · 그동안 짓고 키워 성적을 올리면 더 좋은 곳을 제안받아요`, onClick: () => reply(false) },
+    ],
+    buttons: [],
+  });
+}
 function openTransferModal() {
   const p = Game.state.pastor, card = reportCard();
+  if (bishopCallDue()) { openBishopCall(); return; }
   if (!transferReady()) {
     modal({
       title: '📜 본당 성적표',
@@ -3421,7 +3442,6 @@ function openTransferModal() {
       <p class="small">주교님이 제안하신 본당 가운데 원하시는 곳을 말씀드리세요.</p>`,
     options: [
       ...offers.map(id => ({ tile: true, label: `${PARISHES[id].icon} ${PARISHES[id].name}`, tileSub: PARISHES[id].kind, sub: parishCardSub(id), onClick: () => setTimeout(() => confirmTransfer(id), 0) })),
-      { label: `🙏 이 본당에 조금 더 머물겠다고 말씀드린다`, sub: `${TRANSFER.stayWeeks}주일 뒤 다시 평가받아요. 성적을 올리면 더 좋은 곳을 제안받을 수 있어요`, onClick: () => { stayLonger(); toast(`📜 ${TRANSFER.stayWeeks}주일 뒤 다시 평가받아요`); } },
     ],
     buttons: [{ label: '나중에 정하기', cls: 'ghost' }],
   });

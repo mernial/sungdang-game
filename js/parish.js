@@ -139,7 +139,17 @@ function transferNeedText(id) {
   if (n.rep) out.push(`평판 ${n.rep}`);
   return out.join(' · ') || '조건 없음';
 }
-function transferReady() { const p = Game.state.pastor; return !!(p && p.transfer && p.week >= p.transfer.due); }
+// answered가 false면 아직 주교님 전화에 답하지 않았다 (예전 저장의 p.transfer는 답한 것으로 친다)
+function transferReady() { const p = Game.state.pastor; return !!(p && p.transfer && p.transfer.answered !== false && p.week >= p.transfer.due); }
+function bishopCallDue() { const p = Game.state.pastor; return !!(p && p.transfer && p.transfer.answered === false && p.week >= (p.transfer.callAt || 0)); }
+// 주교님 전화에 답하기: go면 그때부터 notice주일 뒤 발령, 아니면 stayWeeks 늘리고 끝나기 notice주일 전에 다시 전화
+function answerBishop(go) {
+  const p = Game.state.pastor, t = p.transfer, weeks = t.notice || TRANSFER.weeks;
+  if (go) { p.transfer = { ...t, answered: true, due: p.week + weeks }; addLog('📞 주교님께 이동하겠다고 말씀드렸어요.'); return; }
+  const due = p.week + TRANSFER.stayWeeks;
+  p.transfer = { week: p.week, due, callAt: due - weeks, notice: weeks, answered: false, stayed: (t.stayed || 0) + 1 };
+  addLog('📞 주교님께 이 본당에 조금 더 머물고 싶다고 청했어요.');
+}
 function transferWeeksLeft() { const p = Game.state.pastor; return p.transfer ? Math.max(0, p.transfer.due - p.week) : 0; }
 // 성당이 정한 레벨에 이르면 인사발령 예정 공문
 function checkTransferNotice(p) {
@@ -148,9 +158,9 @@ function checkTransferNotice(p) {
   const first = questRun(p);
   if (first ? !questsAllDone(p) : p.fixed.church < TRANSFER.church) return null;
   const weeks = first ? FIRST_TRANSFER.weeks : TRANSFER.weeks;
-  p.transfer = { week: p.week, due: p.week + weeks };
-  addLog('📜 교구에서 인사발령 예정 공문이 왔어요.');
-  return `📜 교구에서 인사발령 예정 공문이 왔어요. ${weeks}주일 뒤 이 본당의 성적표를 보고 다음 행선지가 정해져요.`;
+  p.transfer = { week: p.week, due: p.week + weeks, callAt: p.week, notice: weeks, answered: false };
+  addLog('📞 인사발령 시즌이라 교구장 주교님께서 전화를 주셨어요.');
+  return '📞 인사발령 시즌이에요. 교구장 주교님께서 안부 전화를 주셨어요.';
 }
 function transferNeedLabel() { return questRun(Game.state.pastor) ? `첫 본당 퀘스트 ${questDoneCount()}/${FIRST_QUESTS.length}를 마치면 인사발령` : `성당 Lv${TRANSFER.church}이 되면 인사발령`; }
 
