@@ -636,21 +636,30 @@ function groundSig(m) {
   const lots = p && m === MAPS.solmoe && typeof lotsOwned === 'function' ? Object.keys(lotsOwned()).sort().join(',') : '';
   return `${m.w}x${m.h}|${paths.length}|${paths.join(';')}|${World.lockedTiles.size}|${World.pathSet.size}|${lots}`;
 }
-// 길 무늬: 회색 박석(넓적한 돌)을 깐 길. 줄눈은 짙게 (한 장 128픽셀 = 한 칸, 돌 2×2장)
+// 길 무늬 (v1.08 사용자 "자갈길이 기본"): 밝은 회색 잔자갈을 깐 길. 한 장 128픽셀, 가장자리를 감싸 이음매가 없다
 function pathTex() {
   if (World.pathTexC) return World.pathTexC;
   const S = 128, c = document.createElement('canvas'); c.width = c.height = S;
-  const g = c.getContext('2d'); g.fillStyle = '#6f6a62'; g.fillRect(0, 0, S, S); // 줄눈
+  const g = c.getContext('2d'); g.fillStyle = '#a9a398'; g.fillRect(0, 0, S, S);
   let seed = 11; const r = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
-  const cols = ['#c4beb2', '#b5afa3', '#cfc9bc', '#aaa498'];
-  for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) {
-    const x0 = i * 64 + (j % 2 ? 0 : 0), y0 = j * 64, pad = 5 + r() * 2;
-    const pts = [[x0 + pad + r() * 4, y0 + pad + r() * 4], [x0 + 64 - pad - r() * 4, y0 + pad + r() * 4], [x0 + 64 - pad - r() * 4, y0 + 64 - pad - r() * 4], [x0 + pad + r() * 4, y0 + 64 - pad - r() * 4]];
-    g.fillStyle = cols[(i + j * 2) % cols.length]; g.beginPath(); g.moveTo(...pts[0]); for (const q of pts.slice(1)) g.lineTo(...q); g.closePath(); g.fill();
-    g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 2; g.beginPath(); g.moveTo(...pts[3]); g.lineTo(...pts[0]); g.lineTo(...pts[1]); g.stroke(); // 돌 위쪽 빛
-    for (let k = 0; k < 18; k++) { g.fillStyle = `rgba(90,85,78,${0.12 + r() * 0.15})`; g.fillRect(x0 + 10 + r() * 44, y0 + 10 + r() * 44, 2 + r() * 3, 1.5 + r() * 2); } // 돌 결
+  const stones = ['#d6d1c6', '#c3bdb1', '#e2ddd2', '#b3ada1', '#9a948a', '#cfc6b4'];
+  for (let i = 0; i < 230; i++) {
+    const x = r() * S, y = r() * S, rx = 1.6 + r() * 3.2, ry = rx * (0.65 + r() * 0.3), col = stones[i % stones.length];
+    for (const [ox, oy] of [[0, 0], [S, 0], [-S, 0], [0, S], [0, -S]]) {
+      g.fillStyle = 'rgba(60,55,48,.35)'; g.beginPath(); g.ellipse(x + ox + 0.7, y + oy + 0.9, rx, ry, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = col; g.beginPath(); g.ellipse(x + ox, y + oy, rx, ry, 0, 0, Math.PI * 2); g.fill();
+    }
   }
   return (World.pathTexC = c);
+}
+// 동네 큰길: 짙은 회색 포장길 (잔 얼룩)
+function roadTex() {
+  if (World.roadTexC) return World.roadTexC;
+  const S = 128, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d'); g.fillStyle = '#5e5d5a'; g.fillRect(0, 0, S, S);
+  let seed = 23; const r = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  for (let i = 0; i < 500; i++) { const v = 70 + r() * 40 | 0; g.fillStyle = `rgba(${v},${v},${v - 4},.5)`; g.fillRect(r() * S, r() * S, 1 + r() * 2, 1 + r() * 2); }
+  return (World.roadTexC = c);
 }
 // 흙밭 가면: 칸마다 한 점, 흙이 땅의 60%쯤 (가장자리는 부드럽게)
 function dirtMask(m) {
@@ -679,10 +688,27 @@ function farmCanvas(m) {
   if (farms.length) {
     c = document.createElement('canvas'); c.width = m.w * FARM_P; c.height = m.h * FARM_P;
     const g = c.getContext('2d'); g.scale(FARM_P / 128, FARM_P / 128);
-    for (const l of farms) drawFarm(g, l, 128);
+    for (const l of farms) for (const q of farmPatches(l)) drawFarm(g, { ...l, ...q }, 128);
   }
   World.farmCanvas = c; World.farmFor = m; World.farmKey = key;
   return c;
+}
+// 땅 안 군데군데의 밭·논 배미: 땅을 6칸 덩이로 나눠 정해진 씨앗으로 40%쯤 고른다 (v1.08 사용자 "성당이 밭으로 둘러싸이지 않게, 군데군데만")
+function farmPatches(l) {
+  if (l._patches) return l._patches;
+  const B = 6, out = [];
+  for (let by = l.y; by + 3 <= l.y + l.h; by += B) for (let bx = l.x; bx + 3 <= l.x + l.w; bx += B) {
+    const h = typeof natHash === 'function' ? natHash(bx, by, 83) : 0.5;
+    if (h > 0.42) continue;
+    const w = Math.min(B, l.x + l.w - bx), d = Math.min(B, l.y + l.h - by);
+    out.push({ x: bx, y: by, w, h: d });
+  }
+  return (l._patches = out);
+}
+function farmPatchAt(x, y) {
+  const l = typeof lotAt === 'function' && lotAt(x, y);
+  if (!l || !l.farm || lotsOwned()[l.id]) return null;
+  return farmPatches(l).find(q => x >= q.x && x < q.x + q.w && y >= q.y && y < q.y + q.h) || null;
 }
 // 밭: 갈아엎은 흙에 이랑과 푸른 작물 줄 / 논: 물 댄 논에 모 포기와 논두렁 (바닥 무늬 좌표, 한 칸 = P)
 function drawFarm(g, l, P) {
@@ -741,8 +767,18 @@ function renderGroundChunk(m, gtex, dtex, res, i, j, area) {
     const cells = [];
     for (let x = 0; x < m.w; x++) for (let y = 0; y < m.h; y++) if (isPath(x, y)) cells.push([x, y]);
     if (cells.length) {
-      g.beginPath(); for (const [x, y] of cells) g.rect(x * P, y * P, P, P);
+      const main = (x, y) => World.pathSet.has(x + ',' + y); // 지도에 정해진 동네 큰길 = 포장길, 신부가 놓은 길 = 자갈길
+      g.beginPath(); for (const [x, y] of cells) if (!main(x, y)) g.rect(x * P, y * P, P, P);
       g.fillStyle = g.createPattern(pathTex(), 'repeat'); g.fill();
+      g.beginPath(); for (const [x, y] of cells) if (main(x, y)) g.rect(x * P, y * P, P, P);
+      g.fillStyle = g.createPattern(roadTex(), 'repeat'); g.fill();
+      if (m === MAPS.solmoe) { // 큰길 가운데 노란 중앙선 (두 줄)
+        g.fillStyle = '#e8c547';
+        for (const [px, py, pw, ph] of m.paths) {
+          if (pw >= ph) for (let x = px; x < px + pw; x++) { if (x % 2) continue; g.fillRect(x * P + 10, (py + ph / 2) * P - 9, P - 20, 6); g.fillRect(x * P + 10, (py + ph / 2) * P + 3, P - 20, 6); }
+          else for (let y = py; y < py + ph; y++) { if (y % 2) continue; g.fillRect((px + pw / 2) * P - 9, y * P + 10, 6, P - 20); g.fillRect((px + pw / 2) * P + 3, y * P + 10, 6, P - 20); }
+        }
+      }
       // 가장자리: 길 밖과 맞닿은 변에 짙은 흙 테두리와 작은 돌
       g.fillStyle = 'rgba(70,64,56,.8)';
       for (const [x, y] of cells) {
@@ -820,16 +856,16 @@ function worldDraw() {
   // 아직 안 산 본당 땅은 어둡게 덮고 가운데에 이름과 값을 띄운다
   const lotLabels = [];
   if (World.overview && m === MAPS.solmoe && Game.state.pastor) for (const l of LOTS) {
-    if (lotOwnedAt(l.x, l.y)) continue;
-    poly(ctx, [iso(l.x, l.y), iso(l.x + l.w, l.y), iso(l.x + l.w, l.y + l.h), iso(l.x, l.y + l.h)], l.farm ? 'rgba(46,38,24,.10)' : 'rgba(46,38,24,.32)');
+    if (l.village || lotOwnedAt(l.x, l.y)) continue; // 마을 땅은 안개 위에 따로 적는다
+    poly(ctx, [iso(l.x, l.y), iso(l.x + l.w, l.y), iso(l.x + l.w, l.y + l.h), iso(l.x, l.y + l.h)], 'rgba(46,38,24,.24)');
     const block = lotBlocker(l.id);
     lotLabels.push([l.x + l.w / 2, l.y + l.h / 2, `🏞️ ${l.name} · ${block && block.startsWith('성당') ? '🔒 ' + block : '💰' + lotCost(l) + ' · 눌러서 땅 사기'}`]);
   }
   for (const r of m.regions || []) {
-    if (r.town) { drawFogLabel(ctx, r.x + r.w / 2 + 3 * (m.grid || 1), r.y + 0.6 * (m.grid || 1), '🏘️ 이웃 동네 (면 소재지) · 마을회관을 누르면 종교 현황'); continue; }
     if (!regionLocked(r.id)) continue;
     const v = VILLAGES[r.id];
-    drawFogLabel(ctx, r.x + r.w / 2, r.y + r.h / 2, `🔒 ${v ? v.name : ''} · 이장님께 문의`);
+    const vl = LOTS.find(l => l.id === r.id), vb = vl && lotBlocker(vl.id);
+    drawFogLabel(ctx, r.x + r.w / 2, r.y + r.h / 2, vl ? `🏞️ ${vl.name} · ${vb && vb.startsWith('성당') ? '🔒 ' + vb : '💰' + lotCost(vl) + ' · 눌러서 땅 사기'}` : `🔒 ${v ? v.name : ''} · 이장님께 문의`);
   }
   // 지도 가장자리 테두리
   ctx.strokeStyle = 'rgba(0,0,0,.15)';
@@ -889,7 +925,7 @@ function worldDraw() {
   const offX = -camX - 40, offX2 = World.vw - camX + 40, offY = -camY - 40, offY2 = World.vh - camY + 200;
   if (World.overview && m.obstacles) for (const o of m.obstacles()) {
     if (o.type !== 'tree' && regionLocked(m.regionAt(o.x, o.y))) continue;
-    if (o.type !== 'tree' && o.type !== 'house' && m === MAPS.solmoe && Game.state.pastor && (l => l && l.farm && !lotsOwned()[l.id])(lotAt(o.x, o.y))) continue; // 남의 밭·논 위 잡초·돌은 사고 나서 보인다
+    if (o.type !== 'tree' && o.type !== 'house' && m === MAPS.solmoe && Game.state.pastor && farmPatchAt(o.x, o.y)) continue; // 남의 밭·논 배미 위 잡초·돌은 사고 나서 보인다
     const ox1 = iso(o.x, o.y + o.d)[0], ox2 = iso(o.x + o.w, o.y)[0], oy1 = iso(o.x, o.y)[1], oy2 = iso(o.x + o.w, o.y + o.d)[1];
     if (ox2 < offX || ox1 > offX2 || oy2 < offY || oy1 > offY2) continue;
     objs.push({ box: [o.x + 0.1, o.y + 0.1, o.x + o.w - 0.1, o.y + o.d - 0.1], draw: () => {

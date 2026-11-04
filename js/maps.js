@@ -96,13 +96,13 @@ const MAPS = {
 // regions: 넓혀야 들어갈 수 있는 마을. 잠겨 있으면 안개로 덮이고 막힌다
 MAPS.solmoe = {
   name: '솔뫼 본당',
-  w: 30, h: 34,             // 아래쪽 y 24~27은 살 수 있는 밭·논(v1.08), y 28~33은 이웃 동네(면 소재지)
+  w: 30, h: 34,             // 아래쪽 y 24~27은 살 수 있는 밭·논, y 28~29는 동네 큰길, y 30~33은 이웃 동네(면 소재지) — 동네 땅도 살 수 있다 (v1.08)
   spawn: [9.5, 7.5],
   overview: true,          // 캐릭터 없이 멀리서 바라본다
   viewCenter: [9, 8],      // 처음 바라보는 곳
   viewWidth: 130,          // 처음 화면에 들어오게 할 월드 너비(픽셀, 두 배 칸으로 늘린 뒤 260: 핸드폰 1.5배, 컴퓨터 3배). v0.81: 사람이 크게 보이게 가까이
   eventSpot: [10.5, 6.8],
-  paths: [[0, 28, 30, 1], [14, 28, 2, 6]],  // 본당 땅의 길은 신부가 직접 놓는다 (p.paths). 이건 이웃 동네의 길
+  paths: [[0, 28, 30, 2], [14, 30, 2, 4]],  // 동네 큰길 (두 칸 폭 포장길, 지을 수 없다)  // 본당 땅의 길은 신부가 직접 놓는다 (p.paths). 이건 이웃 동네의 길
   fixed: [
     { id: 'church', label: '솔뫼 성당', x: 7, y: 1, w: 4, d: 5, style: 'church', door: { side: 'S', u: 0.5 }, menu: 'church' },
     { id: 'rectory', label: '사제관', x: 15, y: 1, w: 2, d: 2, h: 18, style: 'house', door: { side: 'S', u: 0.5 }, menu: 'rectory' },
@@ -122,16 +122,16 @@ MAPS.solmoe = {
     { id: 'v1b', x: 24, y: 11, region: 'v1' },
     { id: 'v1c', x: 22, y: 17, region: 'v1' },
   ],
-  regions: [{ id: 'v1', x: 21, y: 0, w: 9, h: 24 }, { id: 'town', x: 0, y: 28, w: 30, h: 6, town: true }],
+  regions: [{ id: 'v1', x: 21, y: 0, w: 9, h: 24 }],  // v1.08: 이웃 동네는 잠긴 구역이 아니라 살 수 있는 땅 (LOTS town_w·town_e)
   // 이웃 동네 건물: 마을회관과 집들 (v1.08: 사용자 요청으로 다른 종교 건물은 지도에서 뺐다. 종교 현황은 마을회관에서)
   town: [
-    { id: 't_hall', label: '마을회관', x: 17, y: 29, w: 2, d: 3, h: 14, style: 'office', door: { side: 'S', u: 0.5 }, menu: 'townhall' },
-    { id: 't_h1', label: '동네 집', x: 8, y: 29, w: 2, d: 2, h: 12, style: 'cottage', door: { side: 'S', u: 0.5 } },
-    { id: 't_h2', label: '동네 집', x: 21, y: 31, w: 2, d: 2, h: 12, style: 'house', door: { side: 'S', u: 0.5 } },
-    { id: 't_h3', label: '동네 가게', x: 0, y: 29, w: 2, d: 2, h: 12, style: 'brick', door: { side: 'S', u: 0.5 } },
-    { id: 't_h4', label: '동네 집', x: 24, y: 29, w: 2, d: 2, h: 12, style: 'cottage', door: { side: 'S', u: 0.5 } },
-    { id: 't_h5', label: '동네 집', x: 4, y: 31, w: 2, d: 2, h: 12, style: 'house', door: { side: 'S', u: 0.5 } },
-    { id: 't_h6', label: '면사무소', x: 27, y: 30, w: 2, d: 2, h: 14, style: 'office', door: { side: 'S', u: 0.5 } },
+    { id: 't_hall', label: '마을회관', x: 17, y: 30, w: 2, d: 3, h: 14, style: 'office', door: { side: 'S', u: 0.5 }, menu: 'townhall' },
+    { id: 't_h1', label: '동네 집', x: 8, y: 30, w: 2, d: 2, h: 12, style: 'cottage', door: { side: 'S', u: 0.5 } },
+    { id: 't_h2', label: '동네 집', x: 21, y: 32, w: 2, d: 2, h: 12, style: 'house', door: { side: 'S', u: 0.5 } },
+    { id: 't_h3', label: '동네 가게', x: 0, y: 30, w: 2, d: 2, h: 12, style: 'brick', door: { side: 'S', u: 0.5 } },
+    { id: 't_h4', label: '동네 집', x: 24, y: 30, w: 2, d: 2, h: 12, style: 'cottage', door: { side: 'S', u: 0.5 } },
+    { id: 't_h5', label: '동네 집', x: 4, y: 32, w: 2, d: 2, h: 12, style: 'house', door: { side: 'S', u: 0.5 } },
+    { id: 't_h6', label: '면사무소', x: 27, y: 31, w: 2, d: 2, h: 14, style: 'office', door: { side: 'S', u: 0.5 } },
   ],
   statues: [[6, 6]],
   trees: [[0, 0], [4, 0], [13, 0], [19, 0], [0, 4], [4, 4], [19, 4], [0, 9], [4, 9], [19, 7], [0, 15], [4, 15], [8, 14], [15, 15], [19, 14], [0, 22], [3, 22], [8, 22], [14, 22], [19, 21], [19, 17],
@@ -195,7 +195,7 @@ MAPS.solmoe = {
     const used = new Set(), road = new Set();
     const mark = (bx, by, bw, bd, set = used) => { for (let i = bx; i < bx + bw; i++) for (let j = by; j < by + bd; j++) set.add(i + ',' + j); };
     const G = this.grid || 1, TS = this.treeSize || 1;
-    for (const b of [...this.fixed, ...this.houses]) { mark(b.x, b.y, b.w, b.d); mark(b.x + Math.floor(b.w / 2) - (G - 1), b.y + b.d, G, G); }
+    for (const b of [...this.fixed, ...this.houses, ...this.town]) { mark(b.x, b.y, b.w, b.d); mark(b.x + Math.floor(b.w / 2) - (G - 1), b.y + b.d, G, G); }
     for (const [tx, ty] of this.trees) mark(tx, ty, TS, TS);
     for (const [tx, ty] of this.statues || []) mark(tx, ty, G, G);
     for (const [px, py, pw, ph] of this.paths) mark(px, py, pw, ph, road);
@@ -231,7 +231,8 @@ MAPS.solmoe = {
     if (r === 'town') return '이웃 동네라 길을 놓을 수 없어요';
     if (r && !villageOpen(r)) return '아직 열지 않은 마을이에요';
     if (!r && !lotOwnedAt(x, y)) return '본당 땅이 아니에요 · 땅을 먼저 사야 해요';
-    for (const b of [...this.fixed.map(fixedAt), ...this.houses]) if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.d) return '건물이 있어요';
+    for (const b of [...this.fixed.map(fixedAt), ...this.houses, ...this.town]) if (x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.d) return '건물이 있어요';
+    for (const [px, py, pw, ph] of this.paths) if (x >= px && x < px + pw && y >= py && y < py + ph) return '동네 큰길이 이미 있어요';
     for (const st of placedThings(p)) { const [w, d] = sizeOf(st.kind, st.rot); if (x >= st.x && x < st.x + w && y >= st.y && y < st.y + d) return '건물이 있어요'; }
     { const TS = this.treeSize || 1, G = this.grid || 1; for (const [tx, ty] of this.statues || []) if (x >= tx && x < tx + G && y >= ty && y < ty + G) return '성모상이 있어요'; }
     if (this.obstacleAt(x, y)) return '잡초·돌·나무를 먼저 치워야 해요';
@@ -252,9 +253,10 @@ MAPS.solmoe = {
     const mark = (bx, by, bw, bd, set = occ) => { for (let i = bx; i < bx + bw; i++) for (let j = by; j < by + bd; j++) set.add(i + ',' + j); };
     // ignore: 옮기는 중인 것 (교리실·조경은 그 자리 기록, 성당·사제관·사무실은 이름)
     for (const f of this.fixed) if (f.id !== ignore) { const b = fixedAt(f); mark(b.x, b.y, b.w, b.d); }
-    for (const b of this.houses) mark(b.x, b.y, b.w, b.d);
+    for (const b of [...this.houses, ...this.town]) mark(b.x, b.y, b.w, b.d);
     for (const [tx, ty] of this.statues || []) mark(tx, ty, this.grid || 1, this.grid || 1);
     for (const k of Object.keys(p.paths || {})) road.add(k);
+    for (const [px, py, pw, ph] of this.paths) mark(px, py, pw, ph, road);
     for (const st of placedThings(p)) if (st !== ignore) mark(st.x, st.y, ...sizeOf(st.kind, st.rot));
     const weeds = new Set();
     for (const o of this.obstacles()) for (let i = o.x; i < o.x + o.w; i++) for (let j = o.y; j < o.y + o.d; j++) weeds.add(i + ',' + j);

@@ -421,8 +421,8 @@ function book(type, cat, amount) {
   if (type) { const g = L.groups[type] || (L.groups[type] = {}); g[cat] = (g[cat] || 0) + amount; }
   else L.parish[cat] = (L.parish[cat] || 0) + amount;
 }
-const LEDGER_ICON = { autoCollect: '🗂️', choirSnack: '🍪', conductor: '🎼', accompanist: '🎹', flowers: '💐', bouquetWedding: '💒', bouquetBaptism: '💐', schoolPrep: '📚', snack: '🍙', laundry: '🧺', hosts: '🍞', wine: '🍷', holyHour: '🕯️', feastCandle: '🕯️', mass: '🕰️', seminary: '🎓', shuttle: '🚐', edu: '🎓', bus: '🚌', food: '🍱', supply: '📦', extra: '➕', agenda: '📨', upkeep: '👥', staff: '👷', building: '🏠', levy: '🏛️', baptism: '🕊️', event: '🎉' };
-const LEDGER_NAME = { choirSnack: '성가대 간식비', conductor: '지휘자 봉사비', accompanist: '반주자 지원금', flowers: '꽃 구입비', bouquetWedding: '혼배 꽃다발 판매', bouquetBaptism: '세례식 꽃다발 판매', schoolPrep: '교리 준비비', snack: '간식 재료비', laundry: '제대포·제의 세탁비', hosts: '제병 구입비', wine: '미사주 구입비', holyHour: '성시간 컵초 판매', feastCandle: '대축일 컵초 판매', mass: '미사 경비', seminary: '신학교 지원비', shuttle: '셔틀버스 기름값', edu: '교육·연수비', bus: '버스 대여비', food: '식사·다과비', supply: '재료·물품비', extra: '추가 지원', agenda: '상임위 건의', upkeep: '단체 활동비', staff: '인건비', building: '건물 살림', levy: '교구 공납금', baptism: '세례식', autoCollect: '사무실이 대신 거둔 봉헌' };
+const LEDGER_ICON = { autoCollect: '🗂️', choirSnack: '🍪', conductor: '🎼', accompanist: '🎹', flowers: '💐', bouquetWedding: '💒', bouquetBaptism: '💐', schoolPrep: '📚', snack: '🍙', laundry: '🧺', hosts: '🍞', wine: '🍷', holyHour: '🕯️', feastCandle: '🕯️', mass: '🕰️', seminary: '🎓', shuttle: '🚐', edu: '🎓', bus: '🚌', food: '🍱', supply: '📦', extra: '➕', agenda: '📨', upkeep: '👥', staff: '👷', building: '🏠', levy: '🏛️', loan: '🏦', baptism: '🕊️', event: '🎉' };
+const LEDGER_NAME = { choirSnack: '성가대 간식비', conductor: '지휘자 봉사비', accompanist: '반주자 지원금', flowers: '꽃 구입비', bouquetWedding: '혼배 꽃다발 판매', bouquetBaptism: '세례식 꽃다발 판매', schoolPrep: '교리 준비비', snack: '간식 재료비', laundry: '제대포·제의 세탁비', hosts: '제병 구입비', wine: '미사주 구입비', holyHour: '성시간 컵초 판매', feastCandle: '대축일 컵초 판매', mass: '미사 경비', seminary: '신학교 지원비', shuttle: '셔틀버스 기름값', edu: '교육·연수비', bus: '버스 대여비', food: '식사·다과비', supply: '재료·물품비', extra: '추가 지원', agenda: '상임위 건의', upkeep: '단체 활동비', staff: '인건비', building: '건물 살림', levy: '교구 공납금', loan: '신협 대출 상환', baptism: '세례식', autoCollect: '사무실이 대신 거둔 봉헌' };
 // 활동비를 줄인 단체 (살림 30% 줄지만 매일 활력 −3)
 function groupCut(type) { return groupBudget(type) === 'low'; }
 // ---------- 단체별 지원 수준 ----------
@@ -2498,10 +2498,12 @@ function lotsOwned() { const p = Game.state.pastor; return parishDef().interior 
 function lotAt(x, y) { return LOTS.find(l => x >= l.x && x < l.x + l.w && y >= l.y && y < l.y + l.h) || null; }
 // 이 칸이 본당 땅인지: 마을·이웃 동네는 따로 다루고(null), 본당 부지는 산 구획만
 function lotOwnedAt(x, y) { const l = lotAt(x, y); return !l || !!lotsOwned()[l.id]; }
-function lotCost(l) { return scaledCost(l.cost); }
+// 땅값은 LOTS에 적힌 고정값 (성당에서 멀수록 비싸다, js/data.js LOTS 위 설명)
+function lotCost(l) { return l.cost; }
 function lotBlocker(id) {
   const l = LOTS.find(x => x.id === id), p = Game.state.pastor;
   if (lotsOwned()[id]) return '이미 산 땅이에요';
+  if (l.village && villageOpen(id)) return '이미 열린 마을이에요';
   if (p.fixed.church < l.church) return `성당 Lv${l.church}부터 살 수 있어요`;
   if (p.res.offering < lotCost(l)) return `봉헌금 ${lotCost(l)}만 원이 필요해요`;
   return null;
@@ -2511,6 +2513,7 @@ function buyLot(id) {
   const l = LOTS.find(x => x.id === id), p = Game.state.pastor, cost = lotCost(l);
   p.res.offering -= cost; book(null, 'building', cost);
   lotsOwned()[id] = true;
+  if (l.village && p.villages[id]) p.villages[id].open = true;
   const msg = `🏞️ ${l.name} 땅을 샀어요 (💰${cost}). 본당 땅이 넓어졌어요${p.fence ? ' · 담장도 새 땅 둘레로 옮겨 세웠어요' : ''}`;
   addLog(msg);
   return msg;
@@ -2935,8 +2938,46 @@ function payLumpSum() {
   return `올해 공납금 ${q.pay}만 원을 한 번에 냈어요. ${q.saved}만 원을 감면받았어요. 올해는 주일마다 공납금을 내지 않아요.`;
 }
 
+// 신협 대출: 빌릴 수 있는 금액·막는 까닭·빌리기·주일 상환·한꺼번에 갚기
+function loanAmount(pl) { return Math.max(10, Math.floor(vaultCap() * pl.share / 10) * 10); }
+function loanBlocker(pl) {
+  const p = Game.state.pastor;
+  if ((p.fixed.office || 1) < LOAN.office) return `사무실 Lv${LOAN.office}부터 빌릴 수 있어요`;
+  if (p.loan) return '빌린 돈을 다 갚아야 또 빌릴 수 있어요';
+  if (p.res.offering + loanAmount(pl) > vaultCap()) return `금고에 자리가 모자라요 (남은 자리 ${Math.floor(vaultCap() - p.res.offering)})`;
+  return null;
+}
+function takeLoan(i) {
+  const pl = LOAN.plans[i], p = Game.state.pastor;
+  if (loanBlocker(pl)) return null;
+  const amt = loanAmount(pl), total = Math.ceil(amt * (1 + pl.rate));
+  p.res.offering += amt;
+  p.loan = { amt, left: total, per: Math.ceil(total / pl.weeks), weeks: pl.weeks, week: p.week };
+  addLog(`🏦 수원가톨릭신협에서 ${amt}만 원을 빌렸어요 (${pl.weeks}주 동안 갚기, 모두 ${total}만 원)`);
+  return `🏦 신협에서 💰${amt}을 빌렸어요. 주일마다 💰${p.loan.per}씩 ${pl.weeks}주 동안 갚아요`;
+}
+function repayLoanAll() {
+  const p = Game.state.pastor, l = p.loan;
+  if (!l || p.res.offering < l.left) return null;
+  p.res.offering -= l.left; book(null, 'loan', l.left); p.loan = null;
+  addLog('🏦 신협 대출을 다 갚았어요');
+  return `🏦 남은 빚 💰${l.left}을 다 갚았어요`;
+}
+function payLoan() {
+  const p = Game.state.pastor, l = p.loan;
+  if (!l) return [];
+  const due = Math.min(l.left, l.per), paid = Math.min(due, Math.floor(p.res.offering));
+  p.res.offering -= paid; book(null, 'loan', paid); l.left -= paid;
+  if (l.left <= 0) { p.loan = null; return [`🏦 신협 대출 ${paid}만 원을 갚아 빚을 다 갚았어요`]; }
+  if (paid < due) {
+    const fee = Math.ceil(l.left * LOAN.late); l.left += fee; addRes('reputation', -LOAN.rep);
+    return [`🏦 신협 대출 ${due}만 원 중 ${paid}만 원만 갚았어요. 연체 이자 ${fee}만 원이 붙었어요 (남은 빚 ${l.left}만 원 · 평판 −${LOAN.rep})`];
+  }
+  return [`🏦 신협 대출 ${paid}만 원을 갚았어요 (남은 빚 ${l.left}만 원)`];
+}
+
 function payLevy() {
-  const p = Game.state.pastor, lines = [];
+  const p = Game.state.pastor, lines = [...payLoan()];
   p.incomeHist = [...(p.incomeHist || []), p.weekIncome || 0].slice(-4);
   // 공납금은 주마다 쌓아 두었다가 달마다 한 번(그달 마지막 주일) 낸다 (v0.76)
   if (!levyPrepaid()) p.levyAccrued = (p.levyAccrued || 0) + Math.round((p.weekIncome || 0) * levyRate());
@@ -3011,7 +3052,7 @@ function villageNeeds(id) {
 
 function villageReady(id) { return villageNeeds(id).every(n => n.ok); }
 
-function villageOpen(id) { const p = Game.state.pastor; return !!(p && p.villages[id] && p.villages[id].open); }
+function villageOpen(id) { const p = Game.state.pastor; return !!(p && ((p.villages[id] && p.villages[id].open) || (p.lots && p.lots[id]))); } // v1.08: 땅을 사도 열린다
 
 // 마을 가정 방문. 정해진 횟수를 채우면 마을이 열린다
 function visitVillage(id) {

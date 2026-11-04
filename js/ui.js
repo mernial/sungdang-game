@@ -565,6 +565,22 @@ function openBulletin() {
   });
 }
 
+// 수원가톨릭신협 대출: 금고 한도의 몇 할을 빌려 주일마다 나눠 갚는다
+function openLoanMenu() {
+  const p = Game.state.pastor, l = p.loan;
+  modal({
+    title: '🏦 수원가톨릭신협 대출',
+    html: `<p class="small">본당 살림이 급할 때 신협에서 돈을 빌려요. 빌린 돈에 이자를 붙여 <b>주일마다 나눠</b> 금고에서 갚아요. 금고가 모자라 못 갚은 주는 남은 빚에 연체 이자 ${Math.round(LOAN.late * 100)}%가 붙고 평판이 조금 깎여요.</p>
+      ${l ? `<p class="small">📒 빌린 돈 ${l.amt}만 원 · <b>남은 빚 ${l.left}만 원</b> · 주일마다 ${Math.min(l.per, l.left)}만 원씩</p>` : '<p class="muted">한 번에 한 건만 빌릴 수 있어요. 빌린 돈도 금고 한도 안에서만 들어와요.</p>'}`,
+    options: [
+      ...(l ? [{ label: `💸 남은 빚 한꺼번에 갚기 <span class="cost">💰${l.left}</span>`, sub: p.res.offering < l.left ? `봉헌금 ${l.left}만 원이 필요해요` : '이자가 더 붙지 않아요', disabled: p.res.offering < l.left, onClick: () => { const m = repayLoanAll(); if (m) { toast(m); save(); } } }] : []),
+      ...LOAN.plans.map((pl, i) => { const b = loanBlocker(pl), amt = loanAmount(pl), total = Math.ceil(amt * (1 + pl.rate)); return {
+        tile: true, label: `🏦 💰${amt} 빌리기`, tileSub: b && !l ? `🔒 ${b.split(' (')[0]}` : `${pl.weeks}주 · 이자 ${Math.round(pl.rate * 100)}%`,
+        sub: b || `주일마다 💰${Math.ceil(total / pl.weeks)}씩 ${pl.weeks}주 · 모두 💰${total}`, disabled: !!b,
+        onClick: () => { const m = takeLoan(i); if (m) { toast(m); save(); } } }; }),
+    ],
+  });
+}
 function openOfficeMenu(t) {
   const s = Game.state, p = s.pastor;
   const est = Math.round((p.weekIncome || 0) * levyRate());
@@ -592,6 +608,7 @@ function openOfficeMenu(t) {
         sub: '다 내야 성당 증축 허가가 나와요', disabled: p.res.offering < 1,
         onClick: () => { const paid = Math.min(p.levyDue, Math.floor(p.res.offering)); p.res.offering -= paid; p.levyDue -= paid; if (p.levyDue <= 0) { p.levyDue = 0; p.trust = Math.min(100, (p.trust || 50) + 1); } toast(`🏛️ 공납금 ${Math.round(paid)}만 원을 냈어요`); },
       }] : []),
+      { tile: true, label: '🏦 신협 대출', tileSub: p.loan ? `남은 빚 💰${p.loan.left}` : (p.fixed.office || 1) < LOAN.office ? `🔒 사무실 Lv${LOAN.office}` : '수원가톨릭신협', onClick: () => setTimeout(openLoanMenu, 0) },
       { tile: true, label: '📅 사목 방향', tileSub: direction() ? `${direction().icon} ${direction().name}` : '이번 달 정하기', onClick: () => setTimeout(openDirectionModal, 0) },
       { tile: true, label: '💼 지출 기준', tileSub: '행사 지원금', onClick: () => setTimeout(openPolicyModal, 0) },
       { tile: true, label: '💰 단체별 지원', tileSub: '활동비 많이·보통·적게', onClick: () => setTimeout(openBudgetModal, 0) },
@@ -1021,6 +1038,8 @@ function openCouncilMenu() {
       { tile: true, label: '🏛️ 조직도', tileSub: `위원장 ${chairsCount()}명${ready ? ` · 선임 가능 ${ready}` : ''}`, onClick: () => setTimeout(openOrgModal, 0) },
       { tile: true, label: '🌳 테크 트리', tileSub: '단체가 열리는 조건', onClick: () => setTimeout(openTechTree, 0) },
       { tile: true, label: '📊 현황과 목표', onClick: () => setTimeout(openCouncil, 0) },
+      // v1.08 사용자 "전체 교구 본당 보기란은 만들되 비활성화": 수원교구 다른 본당을 큰 지도로 보는 칸 (아직 준비 중)
+      { tile: true, label: '🗺️ 전체 교구 본당 보기', tileSub: '준비 중', sub: '수원교구의 다른 본당들을 큰 지도로 둘러보는 곳이에요 · 아직 준비 중이에요', disabled: true },
       { tile: true, label: '📜 본당 성적표', tileSub: p.transfer ? (transferReady() ? '인사발령 공문이 왔어요' : `발령까지 ${transferWeeksLeft()}주일`) : transferNeedLabel(), onClick: () => setTimeout(openTransferModal, 0) },
       { tile: true, label: '📅 사목 방향', tileSub: direction() ? `${direction().icon} ${direction().name}` : '이번 달 정하기', onClick: () => setTimeout(openDirectionModal, 0) },
       { tile: true, label: '💼 지출 기준', tileSub: '행사 지원금', onClick: () => setTimeout(openPolicyModal, 0) },
@@ -1689,7 +1708,7 @@ function openLotMenu(id) {
     title: `🏞️ ${l.name}`,
     html: `<p class="small">${l.desc}</p><p class="muted">${l.w}×${l.h}칸 · ${own ? '본당 땅이에요' : `사면 이 땅에 교리실·조경·길을 놓고, 잡초·돌·나무를 치울 수 있어요${lotsOwned().home && Game.state.pastor.fence ? ' · 담장도 새 땅 둘레로 넓혀 둘러요' : ''}`}</p>`,
     options: own ? [] : [{ label: `🏞️ 땅 사기 · 💰${lotCost(l)}`, sub: block || '바로 본당 땅이 돼요', disabled: !!block,
-      onClick: () => { const m = buyLot(id); if (m) toast(m); } }],
+      onClick: () => { const m = buyLot(id); if (m) { toast(m); save(); syncWorldLayout(); } } }],
     buttons: [{ label: '닫기', cls: 'ghost' }],
   });
 }
@@ -1972,6 +1991,7 @@ function onWorldTap(hit) {
   else if (hit.npc) onInteract({ npc: hit.npc, label: hit.npc.name, menu: hit.npc.menu, lines: hit.npc.lines });
   else if (hit.building) onInteract({ building: hit.building, label: hit.building.label, menu: hit.building.menu });
   else if (hit.plot) onInteract({ plot: hit.plot, label: hit.plot.gongsoOnly ? '빈 땅 (공소 자리)' : '빈 땅', menu: 'plot' });
+  else if (hit.region && LOTS.some(l => l.id === hit.region)) openLotMenu(hit.region); // v1.08: 잠긴 마을도 땅처럼 사서 연다
   else if (hit.region && VILLAGES[hit.region]) openVillage(hit.region);
 }
 
