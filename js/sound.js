@@ -69,7 +69,7 @@ const Sound = (() => {
   // 정해진 대사는 Supertonic 3(무료 기기 안 TTS)으로 사람마다 다른 목소리로 미리 녹음해 두었다 (tools/make-voice.py).
   // assets/voice/<해시>.mp3, 해시 = FNV-1a("얼굴|글"). 녹음이 없는 말(숫자가 바뀌는 말 등)은 기계음 대신 읽지 않는다.
   let voiceIdx = null, cur = null;
-  fetch('assets/voice/index.json?v=1').then(r => r.json()).then(a => { voiceIdx = new Set(a); }).catch(() => { voiceIdx = new Set(); });
+  fetch('assets/voice/index.json?v=2').then(r => r.json()).then(a => { voiceIdx = new Set(a); }).catch(() => { voiceIdx = new Set(); });
   const plainOf = t => String(t).replace(/<[^>]+>/g, '').replace(/[“”"]/g, '').trim();
   function voiceKey(face, text) {
     let h = 0x811c9dc5;

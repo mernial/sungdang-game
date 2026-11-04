@@ -47,6 +47,7 @@ function faceFor(who) {
   if (/주교/.test(w)) return 'diocese';
   if (/할머니|어머님|권사|노부인|할매/.test(w)) return 'faithful';
   if (/할아버지|어르신|노인|이장|회장님|영감/.test(w)) return 'grandpa';
+  if (/엄마|어머니|아내|부인|며느리|딸/.test(w)) return 'woman';
   if (/청년|학생|젊은|아이|소년|소녀|대학|군인|신학생/.test(w)) return 'youth';
   if (/자매|엄마|어머니|아내|부인|여|며느리|딸|교사/.test(w)) return 'woman';
   if (/신부/.test(w)) return 'deanery';
@@ -2544,7 +2545,7 @@ function updatePrompt(t) {
 // ---------- 화면: 타이틀 / 프롤로그 / 보좌 임기 끝 ----------
 
 // ---------- 이야기 화면 (v1.06): 그림이 화면 가득 장면을 보여 주고, 아래 대화창에 글이 한 줄씩, 선택은 아래에 ----------
-const STORY_IMG = n => `assets/story/${n}.webp?v=2`;
+const STORY_IMG = n => `assets/story/${n}.webp?v=3`;
 function vnHtml({ img, chap, dots, title, lines, foot, body, who }) {
   return `<div class="vn" style="background-image:url('${STORY_IMG(img)}')">
     <div class="vn-shade"></div>
