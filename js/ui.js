@@ -133,7 +133,9 @@ function nextModal() {
 // 잠긴 선택지를 눌렀을 때: 까닭(why → 설명 → 작은 글)과, 행동력 때문이면 다음 회복까지 남은 시간
 function lockedTap(o) {
   const strip = t => String(t || '').replace(/<[^>]+>/g, '').trim();
-  let why = strip(o.why) || strip(o.sub) || strip(o.tileSub) || '지금은 할 수 없어요';
+  // 설명 속 굵은 글(<b>막힌 까닭</b>)이 있으면 그것만 (v1.08: 비교·비용 글 끝에 묻혀 안 보이던 것)
+  const bold = (String(o.sub || '').match(/<b>([\s\S]*?)<\/b>/) || [])[1];
+  let why = strip(o.why) || strip(bold) || strip(o.sub) || strip(o.tileSub) || '지금은 할 수 없어요';
   const cost = (String(o.label).match(/⚡(\d+)/) || [])[1];
   if (/행동력/.test(why) || (cost && Game.state.energy < +cost)) {
     const sec = secondsToNextEnergy();
@@ -1706,7 +1708,7 @@ function openLotMenu(id) {
   const l = LOTS.find(x => x.id === id), block = lotBlocker(id), own = lotsOwned()[id];
   modal({
     title: `🏞️ ${l.name}`,
-    html: `<p class="small">${l.desc}</p><p class="muted">${l.w}×${l.h}칸 · ${own ? '본당 땅이에요' : `사면 이 땅에 교리실·조경·길을 놓고, 잡초·돌·나무를 치울 수 있어요${lotsOwned().home && Game.state.pastor.fence ? ' · 담장도 새 땅 둘레로 넓혀 둘러요' : ''}`}</p>`,
+    html: `${own ? '' : `<p class="small"><b>${block && block.startsWith('성당') ? `🔒 아직 살 수 없는 땅이에요 · ${block}` : block ? `🏞️ 살 수 있는 땅이에요 · ${block}` : `✅ 지금 살 수 있는 땅이에요 · 💰${lotCost(l)}`}</b></p>`}<p class="small">${l.desc}</p><p class="muted">${l.w}×${l.h}칸 · ${own ? '본당 땅이에요' : `사면 이 땅에 교리실·조경·길을 놓고, 잡초·돌·나무를 치울 수 있어요${lotsOwned().home && Game.state.pastor.fence ? ' · 담장도 새 땅 둘레로 넓혀 둘러요' : ''}`}</p>`,
     options: own ? [] : [{ label: `🏞️ 땅 사기 · 💰${lotCost(l)}`, sub: block || '바로 본당 땅이 돼요', disabled: !!block,
       onClick: () => { const m = buyLot(id); if (m) { toast(m); save(); syncWorldLayout(); } } }],
     buttons: [{ label: '닫기', cls: 'ghost' }],
@@ -1935,7 +1937,7 @@ function doObAction(id) {
 // 건물 위 ⬆를 눌렀을 때: 바로 올릴지 묻는다
 function openUpgradeConfirm(id) {
   const u = upgradeFor(id);
-  if (!u) { toast('지금은 올릴 수 없어요'); return; }
+  if (!u) { const m = upgradeMissingText(id); Sound.sfx('error'); toast(`🔒 ${m || '지금은 올릴 수 없어요'}`); return; }
   if (u.waiting) {
     const p = Game.state.pastor;
     modal({
@@ -1995,7 +1997,7 @@ function onWorldTap(hit) {
   if (hit && hit.interiorRoom) { openInteriorRoom(hit.interiorRoom); return; }
   if (!hit || !hit.obstacle || hit.obstacle.type === 'house') World.obSel = null;
   if (!hit) return;
-  if (hit.lot) { openLotMenu(hit.lot.id); return; }
+  if (hit.lot) { const b = lotBlocker(hit.lot.id); toast(b && b.startsWith('성당') ? `🔒 ${hit.lot.name} · ${b}` : `🏞️ ${hit.lot.name} · 살 수 있는 땅이에요 (💰${lotCost(hit.lot)})`); openLotMenu(hit.lot.id); return; }
   if (hit.massGo) { goToMass(); return; }
   if (hit.meetGo) { openRoomMenu(hit.meetGo[0], hit.meetGo[1]); return; }
   if (hit.obstacle && hit.obstacle.type !== 'house') { World.obSel = World.obSel && World.obSel.id === hit.obstacle.id ? null : { id: hit.obstacle.id }; return; }

@@ -154,7 +154,7 @@ function drawObAction(ctx, camX, camY) {
   const m = World.map, o = m.obstacleList && m.obstacleList().find(q => q.id === World.obSel.id);
   const info = o && typeof obActionInfo === 'function' ? obActionInfo(o) : null;
   if (!info) { World.obSel = null; return; }
-  const k = Math.max(1, 2 / World.scale), [ax, ay] = iso(o.x + o.w / 2, o.y + o.d / 2);
+  const k = Math.max(1, 2.6 / World.scale), [ax, ay] = iso(o.x + o.w / 2, o.y + o.d / 2); // v1.08: 버튼을 키워 잘 눌리게
   const x = Math.round(ax), y = Math.round(ay - (o.type === 'house' ? 30 : 16) * 1 - 10 * k);
   ctx.font = `bold ${Math.round(8 * k)}px sans-serif`;
   ctx.textAlign = 'center';
@@ -168,7 +168,8 @@ function drawObAction(ctx, camX, camY) {
   ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx, by, w, h, 4 * k) : ctx.rect(bx, by, w, h); ctx.fill();
   ctx.fillStyle = '#fff';
   ctx.fillText(info.label, x, by + h - 4 * k);
-  World.hits.push({ x: bx + camX - 3, y: by + camY - 3, w: w + 6, h: h + 6, id: o.id, obAct: true });
+  const sl = 12 / World.scale; // 손가락 둘레
+  World.hits.push({ x: bx + camX - sl, y: by + camY - sl, w: w + sl * 2, h: h + sl * 2, id: o.id, obAct: true });
 }
 
 // 치운 자리 위로 결과가 떠오른다 (1.8초)
@@ -854,7 +855,7 @@ function worldDraw() {
     const k = x + ',' + y;
     const built = World.overview && Game.state.pastor && Game.state.pastor.paths && Game.state.pastor.paths[k];
     const kind = World.lockedTiles.has(k) ? 'fog' : World.pathSet.has(k) || built ? 'path' : 'grass';
-    if (gtex && kind !== 'fog') continue;
+    if (gtex) continue; // v1.08 사용자 "윗말도 바닥을 채워줘": 잠긴 마을도 흙·풀 무늬를 깔고, 아래에서 어둡게 덮고 둘레를 긋는다
     drawTile(ctx, x, y, kind);
   }
   for (const pl of World.plots) drawPlot(ctx, pl, World.target && World.target.plot === pl);
@@ -862,14 +863,25 @@ function worldDraw() {
   const lotLabels = [];
   if (World.overview && m === MAPS.solmoe && Game.state.pastor) for (const l of LOTS) {
     if (l.village || lotOwnedAt(l.x, l.y)) continue; // 마을 땅은 안개 위에 따로 적는다
-    poly(ctx, [iso(l.x, l.y), iso(l.x + l.w, l.y), iso(l.x + l.w, l.y + l.h), iso(l.x, l.y + l.h)], 'rgba(46,38,24,.24)');
-    const block = lotBlocker(l.id);
+    const block = lotBlocker(l.id), sq = [iso(l.x, l.y), iso(l.x + l.w, l.y), iso(l.x + l.w, l.y + l.h), iso(l.x, l.y + l.h)];
+    poly(ctx, sq, 'rgba(46,38,24,.24)');
+    // v1.08 사용자 "구매 가능한 땅의 범위가 어디인지 표시해줘": 살 수 있는 땅은 금빛 점선, 아직 못 사는 땅은 흰 점선으로 둘레를 긋는다
+    ctx.save(); ctx.setLineDash([5, 3]); ctx.lineDashOffset = -(World.frameT || 0) * 6; ctx.lineWidth = Math.max(1.2, 2 / World.scale);
+    ctx.strokeStyle = block && block.startsWith('성당') ? 'rgba(255,255,255,.55)' : 'rgba(255,214,90,.95)';
+    ctx.beginPath(); ctx.moveTo(...sq[0]); for (const q of sq.slice(1)) ctx.lineTo(...q); ctx.closePath(); ctx.stroke(); ctx.restore();
     lotLabels.push([l.x + l.w / 2, l.y + l.h / 2, `🏞️ ${l.name} · ${block && block.startsWith('성당') ? '🔒 ' + block : '💰' + lotCost(l) + ' · 눌러서 땅 사기'}`]);
   }
   for (const r of m.regions || []) {
     if (!regionLocked(r.id)) continue;
     const v = VILLAGES[r.id];
     const vl = LOTS.find(l => l.id === r.id), vb = vl && lotBlocker(vl.id);
+    if (gtex) { // 무늬를 깐 잠긴 마을: 안 산 땅처럼 어둡게 덮고 점선 둘레
+      const sq = [iso(r.x, r.y), iso(r.x + r.w, r.y), iso(r.x + r.w, r.y + r.h), iso(r.x, r.y + r.h)];
+      poly(ctx, sq, 'rgba(46,38,24,.3)');
+      ctx.save(); ctx.setLineDash([5, 3]); ctx.lineDashOffset = -(World.frameT || 0) * 6; ctx.lineWidth = Math.max(1.2, 2 / World.scale);
+      ctx.strokeStyle = vl && !(vb && vb.startsWith('성당')) ? 'rgba(255,214,90,.95)' : 'rgba(255,255,255,.55)';
+      ctx.beginPath(); ctx.moveTo(...sq[0]); for (const q of sq.slice(1)) ctx.lineTo(...q); ctx.closePath(); ctx.stroke(); ctx.restore();
+    }
     drawFogLabel(ctx, r.x + r.w / 2, r.y + r.h / 2, vl ? `🏞️ ${vl.name} · ${vb && vb.startsWith('성당') ? '🔒 ' + vb : '💰' + lotCost(vl) + ' · 눌러서 땅 사기'}` : `🔒 ${v ? v.name : ''} · 이장님께 문의`);
   }
   // 지도 가장자리 테두리
@@ -896,7 +908,7 @@ function worldDraw() {
     // 올릴 수 있으면 ⬆ (누르면 바로 올릴지 묻는다)
     const upg = Game.state.phase === 'pastor' && !b.scaffold && b.menu !== 'house' && typeof upgradeFor === 'function' && upgradeFor(b.id);
     if (upg) {
-      const k = Math.max(1, 2.4 / World.scale), slop = 6 / World.scale;
+      const k = Math.max(1, 2.4 / World.scale), slop = 14 / World.scale; // v1.08: 손가락으로 잘 눌리게 둘레를 넉넉히
       const r = drawUpBadge(ctx, b, World.frameT, k, upg.waiting);
       World.hits.push({ x: r.x + camX - slop, y: r.y + camY - slop, w: r.w + slop * 2, h: r.h + slop * 2, id: b.id, up: true });
     }
@@ -905,7 +917,7 @@ function worldDraw() {
     const st0 = stashBubble(b);
     if (mc) {
       // 봉헌 말풍선이 함께 있으면 종은 왼쪽으로 비켜 선다 (둘 다 누를 수 있게)
-      const k = Math.max(1, 2.4 / World.scale), slop = 6 / World.scale;
+      const k = Math.max(1, 2.4 / World.scale), slop = 14 / World.scale; // v1.08: 손가락으로 잘 눌리게 둘레를 넉넉히
       const r = drawMassBubble(ctx, b, mc, World.frameT, k, st0 ? -36 * k : 0);
       World.hits.push({ x: r.x + camX - slop, y: r.y + camY - slop, w: r.w + slop * 2, h: r.h + slop * 2, id: b.id, massGo: true });
     }

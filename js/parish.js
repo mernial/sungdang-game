@@ -1301,6 +1301,19 @@ function upgradeFor(id) {
   return u;
 }
 
+// 이 건물을 지금 왜 못 올리는지 (모자란 것을 모두). 올릴 게 없으면 null (v1.08 사용자 "업그레이드가 안 되면 뭐가 부족한지 알려줘")
+function upgradeMissingText(id) {
+  const p = Game.state.pastor;
+  if (!p) return null;
+  if (jobFor(id)) return '이 건물은 공사 중이에요';
+  if (id === 'church') return blockText('fixed', 'church', null, p.fixed.church + 1);
+  if (FIXED[id]) return blockText('fixed', id, null, p.fixed[id] + 1);
+  const site = p.sites[id];
+  if (!site || !site.built) return null;
+  if (site.kind === 'gongso') return blockText('gongso', id, null, site.level + 1);
+  const to = (site.level || 1) + 1;
+  return ROOM_LEVELS[to] ? blockText('room', id, null, to) : '최고 레벨이에요';
+}
 function upgradeForRaw(id) {
   const p = Game.state.pastor;
   if (!p || jobFor(id)) return null;
