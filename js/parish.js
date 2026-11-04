@@ -741,13 +741,6 @@ function p_newDay(p) {
       if (n) lines.push(`🧰 시설관리팀장님이 봉사를 나와 마당의 잡초·돌·나무 ${n}곳을 치웠어요`);
     }
   }
-  // 치운 빈터에 가끔 잡초가 다시 자란다
-  if (d.day !== null && p.cleared && !hasManager() && Math.random() < 0.5) {
-    const cand = MAPS.solmoe.obstacleList().filter(o => o.type === 'weed' && p.cleared[o.id] && !(p.paths && p.paths[o.x + ',' + o.y]));
-    const occupied = new Set(placedThings(p).flatMap(st => { const [w, h] = sizeOf(st.kind, st.rot); const a = []; for (let i = st.x; i < st.x + w; i++) for (let j = st.y; j < st.y + h; j++) a.push(i + ',' + j); return a; }));
-    const pick = cand.filter(o => !occupied.has(o.x + ',' + o.y));
-    if (pick.length) { delete p.cleared[pick[Math.floor(Math.random() * pick.length)].id]; lines.push('🌿 빈터 한쪽에 잡초가 다시 자랐어요.'); }
-  }
   p.daily = { day: today, attended: {}, allDone: false, committee: false, acts: {} };
   return lines;
 }
@@ -916,6 +909,30 @@ function drift(v, target, step) {
 }
 
 // 지난 갱신 뒤로 흐른 시간만큼 본당을 굴린다. 끝난 공사와 생산량을 돌려준다.
+// 잡초가 다시 자란다 (v1.08 사용자 "잡초는 내 땅에서 일정 시간이 지나면 자라도록, 현실 시간으로 한 시간에 하나 정도"):
+// 산 본당 땅에서 예전에 잡초를 뽑은 빈 자리(건물·조경·길이 없는 곳) 하나에 WEED_REGROW_MS마다 다시 돋는다.
+// 접속하지 않은 동안 자란 것도 셈하되 한 번에 WEED_REGROW_MAX개까지. 자란 수를 돌려준다
+const WEED_REGROW_MS = 3600000, WEED_REGROW_MAX = 12;
+function weedSpots() {
+  const p = Game.state.pastor, m = MAPS.solmoe, used = new Set(Object.keys(p.paths || {}));
+  for (const st of placedThings(p)) { const [w, h] = sizeOf(st.kind, st.rot); for (let i = st.x; i < st.x + w; i++) for (let j = st.y; j < st.y + h; j++) used.add(i + ',' + j); }
+  const free = o => { for (let i = o.x; i < o.x + o.w; i++) for (let j = o.y; j < o.y + o.d; j++) if (used.has(i + ',' + j)) return false; return true; };
+  return m.obstacleList().filter(o => o.type === 'weed' && p.cleared[o.id] && !jobFor(o.id) && !m.regionAt(o.x, o.y) && lotOwnedAt(o.x, o.y) && free(o));
+}
+function weedTick(now = Date.now()) {
+  const p = Game.state.pastor;
+  if (!p || !p.cleared || parishDef().interior) return 0;
+  const every = WEED_REGROW_MS; // 시험 모드(시간 60배)여도 현실 시간으로
+  if (!p.weedAt) { p.weedAt = now; return 0; }
+  let n = Math.min(WEED_REGROW_MAX, Math.floor((now - p.weedAt) / every));
+  if (n <= 0) return 0;
+  p.weedAt += n * every; if (now - p.weedAt > every) p.weedAt = now;
+  let grown = 0;
+  for (const spots = weedSpots(); n > 0 && spots.length; n--, grown++) delete p.cleared[spots.splice(Math.floor(Math.random() * spots.length), 1)[0].id];
+  if (grown) addLog(`🌿 본당 땅에 잡초가 ${grown}곳 다시 자랐어요`);
+  return grown;
+}
+
 function tickParish(now = Date.now()) {
   const p = Game.state.pastor;
   const out = { hours: 0, done: [], gained: {} };
@@ -924,6 +941,7 @@ function tickParish(now = Date.now()) {
   out.dayLines = p_newDay(p);
   out.dayLines.push(...autoSundays(now));
   out.quests = questTick(now);
+  out.weeds = weedTick(now);
   const hours = Math.min(idleCapHours(), Math.max(0, now - p.lastTick) / 3600000 * paceScale());
   p.lastTick = now;
   out.applicants = hiringTick(hours);

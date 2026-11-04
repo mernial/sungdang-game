@@ -3384,6 +3384,7 @@ function boot() {
       for (const d of t.done) { Sound.sfx('done'); toast(`🏗️ ${d}`, true); }
       if (t.quests && t.quests.length) { showQuestRequest(t.quests[t.quests.length - 1]); save(); }
       if (bishopCallDue() && !UI.modalOpen && !(s.pastor.transfer.rang === s.pastor.week)) { s.pastor.transfer.rang = s.pastor.week; Sound.sfx('open'); openBishopCall(); }
+      if (t.weeds) { syncWorldLayout(); save(); }
       if (t.applicants) { toast(`📨 채용 공고를 보고 지원자 ${t.applicants}명이 찾아왔어요! 사무실에서 만나 보세요`); save(); }
       if (t.dayLines && t.dayLines.length) toast(`🌅 새 날이 밝았어요. ${t.dayLines[0]}`);
       if (t.done.length || (t.dayLines && t.dayLines.length)) { save(); syncWorldLayout(); }
