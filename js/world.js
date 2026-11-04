@@ -273,7 +273,9 @@ function pickAt(clientX, clientY) {
   // 손가락이면 누르는 자리를 조금 넉넉히 (말풍선·버튼 둘레 14화면픽셀)
   const sl = (World.touchSlop || 4) / World.scale;
   const inHit = (h, e) => px >= h.x - e && px <= h.x + h.w + e && py >= h.y - e && py <= h.y + h.h + e && (!h.poly || inPoly(h.poly, px, py));
-  const hs = [...World.hits].reverse(), bubble = hs.find(h => inHit(h, 0)) || hs.find(h => !h.poly && inHit(h, sl));
+  // 겹치는 단추(봉헌 말풍선 옆 ⬆ 등)는 누른 점에서 가운데가 가장 가까운 것을 고른다 (v1.08: 늘 나중에 그린 말풍선이 이겨 ⬆가 안 눌리던 것 고침)
+  const near = list => { let best = null, bd = Infinity; for (const h of list) { const d = Math.hypot(px - (h.x + h.w / 2), py - (h.y + h.h / 2)); if (d < bd) { bd = d; best = h; } } return best; };
+  const hs = [...World.hits].reverse(), bubble = near(hs.filter(h => inHit(h, 0))) || near(hs.filter(h => !h.poly && inHit(h, sl)));
   if (bubble && bubble.hintId) { const hb = World.buildings.find(q => q.id === bubble.hintId); if (hb) return { building: hb }; }
   if (bubble && bubble.hintAt) {
     const [hx, hy] = bubble.hintAt.map(Math.floor), m = World.map, ob = m.obstacleList && m.obstacleList().find(o => hx >= o.x && hx < o.x + o.w && hy >= o.y && hy < o.y + o.d);
@@ -281,10 +283,11 @@ function pickAt(clientX, clientY) {
   }
   if (bubble && !bubble.hintId && !bubble.hintAt) return bubble.interior ? { interiorRoom: bubble.interior } : bubble.sister ? { sisterTap: true, sisterName: bubble.sisterName } : bubble.obAct ? { obAct: bubble.id } : bubble.massGo ? { massGo: true } : bubble.meetGo ? { meetGo: bubble.meetGo } : bubble.rotPlace ? { rotPlace: true } : bubble.rotBtn ? { rotBtn: bubble.id } : bubble.up ? { upgrade: bubble.id } : { bubble: bubble.id };
   const sx = px - World.camOff[0], sy = py - World.camOff[1];
+  // 사람: 몸과 머리 위 "!" 말풍선(발에서 22~31 위)까지, 손가락이면 둘레를 넉넉히 (v1.08: "!"를 눌러도 뒤 건물이 눌리던 것 고침)
   for (const n of World.npcs) {
     if (!npcVisible(n)) continue;
-    const [nx, ny] = iso(n.x, n.y);
-    if (Math.abs(sx - nx) <= 7 && sy <= ny + 2 && sy >= ny - 30) return { npc: n };
+    const [nx, ny] = iso(n.x, n.y), top = npcBubble(n) ? 34 : 30;
+    if (Math.abs(sx - nx) <= 8 + sl && sy <= ny + 3 + sl && sy >= ny - top - sl) return { npc: n };
   }
   let best = null;
   for (const b of World.buildings) {
@@ -633,6 +636,22 @@ function groundSig(m) {
   const lots = p && m === MAPS.solmoe && typeof lotsOwned === 'function' ? Object.keys(lotsOwned()).sort().join(',') : '';
   return `${m.w}x${m.h}|${paths.length}|${paths.join(';')}|${World.lockedTiles.size}|${World.pathSet.size}|${lots}`;
 }
+// 길 무늬: 회색 박석(넓적한 돌)을 깐 길. 줄눈은 짙게 (한 장 128픽셀 = 한 칸, 돌 2×2장)
+function pathTex() {
+  if (World.pathTexC) return World.pathTexC;
+  const S = 128, c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d'); g.fillStyle = '#6f6a62'; g.fillRect(0, 0, S, S); // 줄눈
+  let seed = 11; const r = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  const cols = ['#c4beb2', '#b5afa3', '#cfc9bc', '#aaa498'];
+  for (let j = 0; j < 2; j++) for (let i = 0; i < 2; i++) {
+    const x0 = i * 64 + (j % 2 ? 0 : 0), y0 = j * 64, pad = 5 + r() * 2;
+    const pts = [[x0 + pad + r() * 4, y0 + pad + r() * 4], [x0 + 64 - pad - r() * 4, y0 + pad + r() * 4], [x0 + 64 - pad - r() * 4, y0 + 64 - pad - r() * 4], [x0 + pad + r() * 4, y0 + 64 - pad - r() * 4]];
+    g.fillStyle = cols[(i + j * 2) % cols.length]; g.beginPath(); g.moveTo(...pts[0]); for (const q of pts.slice(1)) g.lineTo(...q); g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 2; g.beginPath(); g.moveTo(...pts[3]); g.lineTo(...pts[0]); g.lineTo(...pts[1]); g.stroke(); // 돌 위쪽 빛
+    for (let k = 0; k < 18; k++) { g.fillStyle = `rgba(90,85,78,${0.12 + r() * 0.15})`; g.fillRect(x0 + 10 + r() * 44, y0 + 10 + r() * 44, 2 + r() * 3, 1.5 + r() * 2); } // 돌 결
+  }
+  return (World.pathTexC = c);
+}
 // 흙밭 가면: 칸마다 한 점, 흙이 땅의 60%쯤 (가장자리는 부드럽게)
 function dirtMask(m) {
   if (World.dirtCanvas && World.dirtFor === m) return World.dirtCanvas;
@@ -648,6 +667,21 @@ function dirtMask(m) {
   }
   g.putImageData(img, 0, 0);
   World.dirtCanvas = c; World.dirtFor = m;
+  return c;
+}
+// 밭·논은 지도 한 장에 한 번만 그려 두고 조각마다 늘려 붙인다 (v1.08: 조각마다 다시 그리면 확대·축소가 버벅였다)
+const FARM_P = 36; // 한 칸 36픽셀 (지도 60×68칸 → 2160×2448)
+function farmCanvas(m) {
+  const key = Object.keys(lotsOwned()).sort().join(',');
+  if (World.farmCanvas && World.farmFor === m && World.farmKey === key) return World.farmCanvas;
+  const farms = LOTS.filter(l => l.farm && !lotsOwned()[l.id]);
+  let c = null;
+  if (farms.length) {
+    c = document.createElement('canvas'); c.width = m.w * FARM_P; c.height = m.h * FARM_P;
+    const g = c.getContext('2d'); g.scale(FARM_P / 128, FARM_P / 128);
+    for (const l of farms) drawFarm(g, l, 128);
+  }
+  World.farmCanvas = c; World.farmFor = m; World.farmKey = key;
   return c;
 }
 // 밭: 갈아엎은 흙에 이랑과 푸른 작물 줄 / 논: 물 댄 논에 모 포기와 논두렁 (바닥 무늬 좌표, 한 칸 = P)
@@ -680,10 +714,11 @@ function drawFarm(g, l, P) {
   }
   g.restore();
 }
-function renderGroundChunk(m, gtex, dtex, res, i, j) {
-  const CS = GROUND_CS, c = document.createElement('canvas'); c.width = c.height = CS;
+// area: [왼쪽, 위, 가로, 세로] 캔버스 픽셀 (없으면 i·j번째 512 조각)
+function renderGroundChunk(m, gtex, dtex, res, i, j, area) {
+  const [ax, ay, aw, ah] = area || [i * GROUND_CS, j * GROUND_CS, GROUND_CS, GROUND_CS], c = document.createElement('canvas'); c.width = aw; c.height = ah;
   const g = c.getContext('2d'), P = 128;
-  g.setTransform(res, 0, 0, res, -i * CS, -j * CS);
+  g.setTransform(res, 0, 0, res, -ax, -ay);
   g.beginPath(); const c4 = [iso(0, 0), iso(m.w, 0), iso(m.w, m.h), iso(0, m.h)]; g.moveTo(...c4[0]); for (const q of c4.slice(1)) g.lineTo(...q); g.closePath(); g.clip();
   g.transform(TW / 2 / P, TH / 2 / P, -TW / 2 / P, TH / 2 / P, 0, 0);
   g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
@@ -692,34 +727,62 @@ function renderGroundChunk(m, gtex, dtex, res, i, j) {
   g.drawImage(groundTint(m), 0, 0, m.w * P, m.h * P);
   // 흙밭 (v1.08 사용자 "풀밭보다 흙밭이 조금 더 많게"): 잡음 가면으로 흙 무늬를 땅의 절반 넘게 덮는다
   if (dtex) {
-    const t = document.createElement('canvas'); t.width = t.height = CS;
+    const t = document.createElement('canvas'); t.width = aw; t.height = ah;
     const tg = t.getContext('2d'); tg.setTransform(g.getTransform()); tg.imageSmoothingEnabled = true;
     tg.fillStyle = tg.createPattern(dtex, 'repeat'); tg.fillRect(0, 0, m.w * P, m.h * P);
     tg.globalCompositeOperation = 'destination-in'; tg.drawImage(dirtMask(m), 0, 0, m.w * P, m.h * P);
     g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(t, 0, 0); g.restore();
   }
   // 아직 안 산 본당 땅: 마을 사람들의 밭·논 (v1.08)
-  if (m === MAPS.solmoe && Game.state.pastor && typeof lotsOwned === 'function') for (const l of LOTS) if (l.farm && !lotsOwned()[l.id]) drawFarm(g, l, P);
-  // 흙길: 놓은 길과 이웃 동네 길
+  if (m === MAPS.solmoe && Game.state.pastor && typeof lotsOwned === 'function') { const fc = farmCanvas(m); if (fc) g.drawImage(fc, 0, 0, m.w * P, m.h * P); }
+  // 길 (v1.08 사용자 "흙길이 바닥과 구분이 없다"): 흙바닥과 다른 회색 박석 길 + 가장자리 짙은 테두리
   if (dtex) {
-    g.beginPath();
-    for (let x = 0; x < m.w; x++) for (let y = 0; y < m.h; y++) {
-      const k = x + ',' + y;
-      if (!World.lockedTiles.has(k) && (World.pathSet.has(k) || (Game.state.pastor && Game.state.pastor.paths && Game.state.pastor.paths[k]))) g.rect(x * P - 2, y * P - 2, P + 4, P + 4);
+    const pp = Game.state.pastor && Game.state.pastor.paths, isPath = (x, y) => { const k = x + ',' + y; return !World.lockedTiles.has(k) && (World.pathSet.has(k) || !!(pp && pp[k])); };
+    const cells = [];
+    for (let x = 0; x < m.w; x++) for (let y = 0; y < m.h; y++) if (isPath(x, y)) cells.push([x, y]);
+    if (cells.length) {
+      g.beginPath(); for (const [x, y] of cells) g.rect(x * P, y * P, P, P);
+      g.fillStyle = g.createPattern(pathTex(), 'repeat'); g.fill();
+      // 가장자리: 길 밖과 맞닿은 변에 짙은 흙 테두리와 작은 돌
+      g.fillStyle = 'rgba(70,64,56,.8)';
+      for (const [x, y] of cells) {
+        if (!isPath(x, y - 1)) g.fillRect(x * P, y * P, P, 9);
+        if (!isPath(x, y + 1)) g.fillRect(x * P, (y + 1) * P - 9, P, 9);
+        if (!isPath(x - 1, y)) g.fillRect(x * P, y * P, 9, P);
+        if (!isPath(x + 1, y)) g.fillRect((x + 1) * P - 9, y * P, 9, P);
+      }
     }
-    g.fillStyle = g.createPattern(dtex, 'repeat'); g.fill();
   }
   return c;
+}
+// 지도 전체 바닥을 낮은 해상도로 한 장 (v1.08): 확대·축소 직후 아직 못 그린 조각 자리에 먼저 깔아 둔다
+const GROUND_LOW_RES = 0.6;
+function groundLow(m, gtex, dtex) {
+  const sig = groundSig(m);
+  if (World.groundLow && World.groundLowSig === sig) return World.groundLow;
+  const x0 = iso(0, m.h)[0], x1 = iso(m.w, 0)[0], y1 = iso(m.w, m.h)[1], r = GROUND_LOW_RES;
+  const c = renderGroundChunk(m, gtex, dtex, r, 0, 0, [Math.floor(x0 * r), 0, Math.ceil((x1 - x0) * r), Math.ceil(y1 * r)]);
+  World.groundLow = { c, x: Math.floor(x0 * r) / r, w: c.width / r, h: c.height / r }; World.groundLowSig = sig;
+  return World.groundLow;
 }
 function drawGroundChunks(ctx, m, gtex, dtex, camX, camY, res) {
   const sig = groundSig(m) + '|' + res;
   if (World.groundSig !== sig) { World.groundSig = sig; GROUND_CHUNKS.clear(); }
   const CS = GROUND_CS, x0 = Math.floor(-camX * res / CS), x1 = Math.floor((World.vw - camX) * res / CS), y0 = Math.floor(-camY * res / CS), y1 = Math.floor((World.vh - camY) * res / CS);
+  // 한 장면에 새로 그리는 조각은 몇 개만 (나머지는 낮은 해상도 바닥이 대신 보이다가 다음 장면들에 채워진다)
+  let budget = 3, low = null;
   ctx.imageSmoothingEnabled = false;
   for (let i = x0; i <= x1; i++) for (let j = y0; j <= y1; j++) {
     const k = i + ',' + j;
     let c = GROUND_CHUNKS.get(k);
-    if (c) GROUND_CHUNKS.delete(k); else c = renderGroundChunk(m, gtex, dtex, res, i, j);
+    if (c) GROUND_CHUNKS.delete(k);
+    else if (budget-- > 0) c = renderGroundChunk(m, gtex, dtex, res, i, j);
+    else {
+      low = low || groundLow(m, gtex, dtex);
+      const L = low, wx = i * CS / res, wy = j * CS / res, ws = CS / res, sx = (wx - L.x) / L.w * L.c.width, sy = wy / L.h * L.c.height, sw = ws / L.w * L.c.width, sh = ws / L.h * L.c.height;
+      ctx.imageSmoothingEnabled = true; ctx.drawImage(L.c, sx, sy, sw, sh, wx, wy, ws, ws); ctx.imageSmoothingEnabled = false;
+      continue;
+    }
     GROUND_CHUNKS.set(k, c);
     ctx.drawImage(c, i * CS / res, j * CS / res, CS / res, CS / res);
   }

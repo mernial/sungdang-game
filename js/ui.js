@@ -1743,6 +1743,11 @@ function endPathMode() { World.pathMode = false; save(); render(); }
 function onPathTap(x, y) {
   const r = togglePath(x, y);
   if (!r.ok) toast(`🛤️ ${r.reason}`);
+  else { // v1.08: 놓았는지 걷었는지, 길 퀘스트가 얼마나 찼는지 바로 알려 준다
+    const n = Object.keys(Game.state.pastor.paths || {}).length, q = ['path5', 'path15', 'path30'].map(questDef).find(d => d && questState().active.includes(d.id));
+    toast(r.removed ? `🛤️ 길을 걷었어요 · 놓은 길 ${n}칸` : `🛤️ 길을 놓았어요 · ${q ? `${q.name} ${Math.min(n, questProgress(q).want)}/${questProgress(q).want}` : `놓은 길 ${n}칸`}`);
+    refreshPastorHud();
+  }
   const n = document.getElementById('path-info');
   if (n) n.outerHTML = pathInfoHtml();
 }
@@ -2414,7 +2419,7 @@ const rewardChips = r => [r.offering ? `<span class="rw gold">💰 ${r.offering}
 // 왼쪽 퀘스트 카드: 걸린 퀘스트 수만 머리에, 아래로 퀘스트 이름 (다 채우면 [받기])
 function questCardHtml() {
   const act = questActive();
-  const rows = act.map(d => { const ok = questProgress(d).ok; return `<button class="qc-row${ok ? ' ok' : ''}" data-quest="${d.id}"><span class="qc-ic">${ok ? '🎁' : d.icon}</span><span class="qc-tx">${d.name}</span>${ok ? '<span class="qc-get">받기</span>' : '<span class="qc-go">›</span>'}</button>`; }).join('');
+  const rows = act.map(d => { const pr = questProgress(d), ok = pr.ok; return `<button class="qc-row${ok ? ' ok' : ''}" data-quest="${d.id}"><span class="qc-ic">${ok ? '🎁' : d.icon}</span><span class="qc-tx">${d.name}${!ok && pr.want > 1 ? `<small>${Math.min(pr.have, pr.want)}/${pr.want}</small>` : ''}</span>${ok ? '<span class="qc-get">받기</span>' : '<span class="qc-go">›</span>'}</button>`; }).join('');
   const bl = blessReqs().map((r, i) => { const b = BLESSINGS.find(x => x.id === r.kind); return `<button class="qc-row bless" data-bless-i="${i}"><span class="qc-ic">${b.icon}</span><span class="qc-tx">${b.name}<small>${esc(r.who)}${b.urgent ? ' · 급해요' : ''}</small></span><span class="qc-go">›</span></button>`; }).join('');
   return `<div class="qcard"><button class="qc-head" data-qlist="1"><span class="qc-scroll">📜</span>퀘스트<span class="qc-n">${act.length + blessReqs().length}</span></button>${rows}${bl}${rows || bl ? '' : `<div class="qc-wait">새 퀘스트를 기다리는 중…</div>`}</div>`;
 }
