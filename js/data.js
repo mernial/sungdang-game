@@ -1934,12 +1934,13 @@ const FENCE_LEVELS = [  // v1.07: 사용자 "낡은 펜스 → 새 펜스 → �
   { name: '벽돌 화단 담', icon: '🌷', per: 18, church: 7, heart: 4, rep: 3, desc: '붉은 벽돌로 쌓은 화단 담. 꽃이 피어 지나는 사람도 웃어요' },
 ];
 
+// cost: 고정값 (v1.08 사용자 "고쳐야 될 것들 고쳐": 땅·담장처럼 본당 수입에 따라 오르지 않게)
 const DECOR = {
-  flowerbed: { name: '화단', icon: '🌷', w: 1, d: 1, cost: 15, heart: 1, church: 1, desc: '성당 길가에 꽃을 심어요' },
-  statue: { name: '성모상', icon: '🙏', w: 1, d: 1, cost: 60, heart: 2, rep: 1, church: 2, desc: '마당 한쪽에 성모님을 모셔요. 오가는 교우들이 기도하고 가요' },
-  maryGarden: { name: '성모동산', icon: '⛰️', w: 2, d: 2, cost: 200, heart: 4, rep: 2, church: 3, may: 3, desc: '돌로 쌓은 작은 동굴에 성모님을 모신 동산. 5월 성모 성월에는 교우들이 더 모여요' },
-  stations: { name: '야외 십자가의 길', icon: '✝️', w: 4, d: 1, cost: 250, heart: 3, rep: 1, church: 4, lent: 3, desc: '14처 십자가를 마당에 세워요. 사순 시기에는 교우들이 십자가의 길 기도를 바쳐요' },
-  parking: { name: '주차장', icon: '🅿️', w: 3, d: 2, cost: 180, heart: 1, rep: 1, attend: 0.03, church: 3, desc: '차를 댈 곳이 생기면 먼 마을 교우들도 주일미사에 와요 (참례율 +3%)' },
+  flowerbed: { name: '화단', icon: '🌷', w: 1, d: 1, cost: 50, heart: 1, church: 1, desc: '성당 길가에 꽃을 심어요' },
+  statue: { name: '성모상', icon: '🙏', w: 1, d: 1, cost: 250, heart: 2, rep: 1, church: 2, desc: '마당 한쪽에 성모님을 모셔요. 오가는 교우들이 기도하고 가요' },
+  maryGarden: { name: '성모동산', icon: '⛰️', w: 2, d: 2, cost: 800, heart: 4, rep: 2, church: 3, may: 3, desc: '돌로 쌓은 작은 동굴에 성모님을 모신 동산. 5월 성모 성월에는 교우들이 더 모여요' },
+  stations: { name: '야외 십자가의 길', icon: '✝️', w: 4, d: 1, cost: 1000, heart: 3, rep: 1, church: 4, lent: 3, desc: '14처 십자가를 마당에 세워요. 사순 시기에는 교우들이 십자가의 길 기도를 바쳐요' },
+  parking: { name: '주차장', icon: '🅿️', w: 3, d: 2, cost: 600, heart: 1, rep: 1, attend: 0.03, church: 3, desc: '차를 댈 곳이 생기면 먼 마을 교우들도 주일미사에 와요 (참례율 +3%)' },
 };
 // v0.80: 조경도 두 배 칸 (성모상은 한 칸 그대로)
 for (const [k, d] of Object.entries(DECOR)) if (k !== 'statue') { d.w *= 2; d.d *= 2; }

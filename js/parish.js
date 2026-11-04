@@ -2604,7 +2604,7 @@ function buildFence() {
 }
 
 // 조경 값: 살림이 커지면 조금씩 오른다 (보통 비용보다 덜)
-function decorCost(kind) { return Math.round(DECOR[kind].cost * Math.max(1, Math.sqrt(parishRates().gross / 6)) / 5) * 5; }
+function decorCost(kind) { return DECOR[kind].cost; }
 function decorBlocker(kind) {
   const p = Game.state.pastor, def = DECOR[kind];
   if (p.fixed.church < def.church) return `성당 Lv${def.church}부터 만들 수 있어요`;

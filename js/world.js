@@ -277,6 +277,15 @@ function pickAt(clientX, clientY) {
   // 겹치는 단추(봉헌 말풍선 옆 ⬆ 등)는 누른 점에서 가운데가 가장 가까운 것을 고른다 (v1.08: 늘 나중에 그린 말풍선이 이겨 ⬆가 안 눌리던 것 고침)
   const near = list => { let best = null, bd = Infinity; for (const h of list) { const d = Math.hypot(px - (h.x + h.w / 2), py - (h.y + h.h / 2)); if (d < bd) { bd = d; best = h; } } return best; };
   const hs = [...World.hits].reverse(), bubble = near(hs.filter(h => inHit(h, 0))) || near(hs.filter(h => !h.poly && inHit(h, sl)));
+  // v1.08: 단추의 넉넉한 둘레(손가락 여유)에만 걸리고 단추 자체는 아니며, 그 자리에 다른 건물·조경 그림이 칠해져 있으면 그 건물이 먼저
+  // (뒤쪽에 놓은 작은 조경이 앞 건물의 ⬆ 둘레에 가려 안 눌리던 것)
+  if (bubble && bubble.core && !(px >= bubble.core.x && px <= bubble.core.x + bubble.core.w && py >= bubble.core.y && py <= bubble.core.y + bubble.core.h)) {
+    const sx0 = px - World.camOff[0], sy0 = py - World.camOff[1];
+    const ftx = (sx0 / (TW / 2) + sy0 / (TH / 2)) / 2, fty = (sy0 / (TH / 2) - sx0 / (TW / 2)) / 2; // 누른 바닥 칸 (그림 없는 조경은 바닥 자리와 한 칸 위까지)
+    const onFoot = b => !b.spriteHit && b.decor && ftx >= b.x - 0.2 && ftx <= b.x + b.w + 1 && fty >= b.y - 0.2 && fty <= b.y + b.d + 1;
+    const under = World.buildings.filter(b => b.id !== bubble.id && (onFoot(b) || (typeof spriteOpaqueAt === 'function' && spriteOpaqueAt(b, sx0, sy0)))).sort((a, b) => (b.x + b.w + b.y + b.d) - (a.x + a.w + a.y + a.d))[0];
+    if (under) return { building: under };
+  }
   if (bubble && bubble.hintId) { const hb = World.buildings.find(q => q.id === bubble.hintId); if (hb) return { building: hb }; }
   if (bubble && bubble.hintAt) {
     const [hx, hy] = bubble.hintAt.map(Math.floor), m = World.map, ob = m.obstacleList && m.obstacleList().find(o => hx >= o.x && hx < o.x + o.w && hy >= o.y && hy < o.y + o.d);
@@ -939,7 +948,7 @@ function worldDraw() {
     if (upg) {
       const k = Math.max(1, 2.4 / World.scale), slop = 14 / World.scale; // v1.08: 손가락으로 잘 눌리게 둘레를 넉넉히
       const r = drawUpBadge(ctx, b, World.frameT, k, upg.waiting);
-      World.hits.push({ x: r.x + camX - slop, y: r.y + camY - slop, w: r.w + slop * 2, h: r.h + slop * 2, id: b.id, up: true });
+      World.hits.push({ x: r.x + camX - slop, y: r.y + camY - slop, w: r.w + slop * 2, h: r.h + slop * 2, core: { x: r.x + camX, y: r.y + camY, w: r.w, h: r.h }, id: b.id, up: true });
     }
     // 미사 시간이면 성당 위에 종 표시 (누르면 미사로)
     const mc = b.id === 'church' && World.overview && typeof massCall === 'function' && massCall();
@@ -948,7 +957,7 @@ function worldDraw() {
       // 봉헌 말풍선이 함께 있으면 종은 왼쪽으로 비켜 선다 (둘 다 누를 수 있게)
       const k = Math.max(1, 2.4 / World.scale), slop = 14 / World.scale; // v1.08: 손가락으로 잘 눌리게 둘레를 넉넉히
       const r = drawMassBubble(ctx, b, mc, World.frameT, k, st0 ? -36 * k : 0);
-      World.hits.push({ x: r.x + camX - slop, y: r.y + camY - slop, w: r.w + slop * 2, h: r.h + slop * 2, id: b.id, massGo: true });
+      World.hits.push({ x: r.x + camX - slop, y: r.y + camY - slop, w: r.w + slop * 2, h: r.h + slop * 2, core: { x: r.x + camX, y: r.y + camY, w: r.w, h: r.h }, id: b.id, massGo: true });
     }
     // 단체 회의가 열렸거나 위원장이 초대하면 교리실 위에 알림 (v0.92, 누르면 그 방으로)
     const mt = World.overview && b.rooms && !b.scaffold && Game.state.phase === 'pastor' && typeof meetingState === 'function'
@@ -956,7 +965,7 @@ function worldDraw() {
     if (mt) {
       const k = Math.max(0.8, 1.9 / World.scale), slop = 6 / World.scale, inv = mt[2] === 'invite'; // 종보다 조금 작게 (이웃 교리실 알림과 덜 겹치게)
       const r = drawMassBubble(ctx, b, { icon: UNITS[mt[0].type].icon, text: inv ? '초대' : '회의', ready: true }, World.frameT, k, st0 ? -44 * k : 0);
-      World.hits.push({ x: r.x + camX - slop, y: r.y + camY - slop, w: r.w + slop * 2, h: r.h + slop * 2, id: b.id, meetGo: [b.id, mt[1]] });
+      World.hits.push({ x: r.x + camX - slop, y: r.y + camY - slop, w: r.w + slop * 2, h: r.h + slop * 2, core: { x: r.x + camX, y: r.y + camY, w: r.w, h: r.h }, id: b.id, meetGo: [b.id, mt[1]] });
     }
     const st = st0;
     if (st) {

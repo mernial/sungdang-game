@@ -815,7 +815,7 @@ function openBuildMenu(plot) {
     return;
   }
   const need = containerNeed();
-  const n = containerCount() + 1;
+  const n = containers().length + 1;
   const block = blockText('container', plot.id, null, 1);
   modal({
     title: '🌾 빈 땅',
@@ -825,7 +825,7 @@ function openBuildMenu(plot) {
     options: need ? [{
       label: `📦 컨테이너 교리실 ${n} 놓기 <span class="cost">${costText(jobCost('container', plot.id, null, 1), upkeepDelta('container', 1))}</span>`,
       sub: block || '방 2개짜리 교리실이 생겨요', disabled: !!block,
-      onClick: () => { if (startJob('container', plot.id, null, 1)) toast(`📦 컨테이너 교리실 ${n}을 놓기 시작했어요`); },
+      onClick: () => { if (startJob('container', plot.id, null, 1)) toast(`📦 ${josa('컨테이너 ' + siteName(plot.id), '을', '를')} 놓기 시작했어요`); },
     }] : [lockedOption('컨테이너', '더 놓을 수 없어요')],
   });
 }
@@ -1666,7 +1666,7 @@ function openBuildCatalog() {
     options: [
       {
         tile: true, tileSub: cBlock ? `🔒 ${cBlock}` : `💰${need ? jobCost('container', 'new', null, 1).offering : ''}`,
-        label: insideParish() ? `🏗️ ${containers().length + 1}층 증축` : `📦 교리실 ${n}`,
+        label: insideParish() ? `🏗️ ${containers().length + 1}층 증축` : `📦 교리실 ${containers().length + 1}`,
         sub: cBlock || (insideParish() ? `성당 건물에 한 층을 올려 교리실 방 ${FLOOR_ROOMS}개를 더 들여요` : `방 ${CONTAINER_ROOMS}개 · 단체 ${CONTAINER_ROOMS}개가 모일 수 있어요`) + (need && need.members ? ` · 신자 ${need.members}명 이상` : ''),
         disabled: !!cBlock, onClick: () => (insideParish() ? setTimeout(openAddFloor, 0) : startPlacing('container')),
       },
@@ -1863,10 +1863,10 @@ function finishPlacing(confirm) {
       if (!m) { toast(decorBlocker(pl.kind) || '놓을 수 없어요'); return; }
       toast(m); save(); World.placing = null; syncWorldLayout(); render(); return;
     }
-    const n = containerCount() + 1;
     const key = placeSite(pl.kind, pl.x, pl.y, pl.rot || 0);
     if (!key) { toast(blockText(pl.kind, 'new', null, 1) || '지을 수 없어요'); return; }
-    toast(pl.kind === 'gongso' ? '🏗️ 공소를 세우기 시작했어요' : `📦 컨테이너 교리실 ${n}을 놓기 시작했어요`);
+    // v1.08: 시작 알림과 다 지은 알림의 교리실 번호가 달랐다(2층 교리실을 두 채로 세던 것) → 실제 이름으로, 조사도 맞게
+    toast(pl.kind === 'gongso' ? '🏗️ 공소를 세우기 시작했어요' : `📦 ${josa('컨테이너 ' + siteName(key), '을', '를')} 놓기 시작했어요`);
     save();
   }
   World.placing = null;
@@ -1951,7 +1951,7 @@ function openUpgradeConfirm(id) {
   const c = jobCost(u.kind, u.key, u.type, u.toLevel);
   const up = u.kind === 'fixed' && u.key === 'church' ? upkeepDelta('church', u.toLevel) : u.kind === 'fixed' ? upkeepDelta('fixed', u.toLevel) : upkeepDelta(u.kind, u.toLevel);
   modal({
-    title: `⬆️ ${u.name}로 올릴까요?`,
+    title: `⬆️ ${u.name}${(b => josa(b, '으로', '로').slice(b.length))(u.name.replace(/["”]$/, ''))} 올릴까요?`,
     html: `${compareHtml(u.kind, u.key, u.type, u.toLevel)}<p class="muted">${costText(c, up)} · 👷 일꾼 ${u.workers}명 · 봉헌금 ${Math.floor(Game.state.pastor.res.offering)}만 원</p>`,
     options: [{ tile: true, label: '⬆️ 올리기', tileSub: `💰${c.offering}`, onClick: () => { if (startJob(u.kind, u.key, u.type, u.toLevel)) { toast(`🏗️ ${u.name} 공사를 시작했어요`); save(); syncWorldLayout(); } } }],
     buttons: [{ label: '아니요', cls: 'ghost' }],
@@ -2404,7 +2404,7 @@ function questTasks() {
 
 const PILL_MAX = 4;
 function questPillsHtml() {
-  const p = Game.state.pastor, tasks = questTasks(), shown = tasks.slice(0, PILL_MAX), more = tasks.length - shown.length;
+  const p = Game.state.pastor, tasks = questTasks(), fold = hudFolded(), shown = tasks.slice(0, fold ? 2 : PILL_MAX), more = tasks.length - shown.length;
   const pill = t => `<button class="pill ${t.hl ? 'hl' : ''}"${t.attr}><span>${t.icon}</span>${t.text}</button>`;
   // 목표: 성당 다음 레벨 조건 중 채운 수를 막대로
   const to = p.fixed.church + 1, c = CHURCH_LEVELS[to];
@@ -2414,7 +2414,8 @@ function questPillsHtml() {
     const needs = churchNeeds(to), ok = needs.filter(n => n.ok).length;
     goal += `<button class="pill goal ${ok === needs.length ? 'hl' : ''}" data-qgoal="1"><span>🎯</span>성당 Lv${to} <span class="gbar"><span style="width:${ok / needs.length * 100}%"></span></span> ${ok}/${needs.length}</button>`;
   }
-  return `<div class="quest-pills" id="quest">${goal}${shown.map(pill).join('')}${more > 0 ? `<button class="pill more" data-qmore="1">+${more}</button>` : ''}</div>`;
+  const foldBtn = window.innerWidth < 520 ? `<button class="pill more" data-hudfold="1">${fold ? '▾ 모두 보기' : '▴ 접기'}</button>` : '';
+  return `<div class="quest-pills" id="quest">${goal}${shown.map(pill).join('')}${more > 0 && !fold ? `<button class="pill more" data-qmore="1">+${more}</button>` : ''}${foldBtn}</div>`;
 }
 
 // 목표 창: 성당 다음 레벨 조건 하나하나와 바로 가기
@@ -2453,11 +2454,15 @@ function onQuestTap(id) {
 }
 const rewardChips = r => [r.offering ? `<span class="rw gold">💰 ${r.offering}</span>` : '', r.gems ? `<span class="rw gem">💎 ${r.gems}</span>` : '', r.heart ? `<span class="rw heart">❤️ +${r.heart}</span>` : ''].join('');
 // 왼쪽 퀘스트 카드: 걸린 퀘스트 수만 머리에, 아래로 퀘스트 이름 (다 채우면 [받기])
+// 폰(좁은 화면)에서는 왼쪽 위 퀘스트·할 일 목록이 지도를 반쯤 가렸다 (v1.08) → 기본으로 접어 두고, 받을 퀘스트와 할 일 두 개만.
+// '모두 보기'를 누르면 펼친다 (localStorage 'sungdang-hud-fold')
+UI.hudFold = (() => { try { return localStorage.getItem('sungdang-hud-fold') !== '0'; } catch (e) { return true; } })();
+function hudFolded() { return UI.hudFold && window.innerWidth < 520; }
 function questCardHtml() {
-  const act = questActive();
-  const rows = act.map(d => { const pr = questProgress(d), ok = pr.ok; return `<button class="qc-row${ok ? ' ok' : ''}" data-quest="${d.id}"><span class="qc-ic">${ok ? '🎁' : d.icon}</span><span class="qc-tx">${d.name}${!ok && pr.want > 1 ? `<small>${Math.min(pr.have, pr.want)}/${pr.want}</small>` : ''}</span>${ok ? '<span class="qc-get">받기</span>' : '<span class="qc-go">›</span>'}</button>`; }).join('');
-  const bl = blessReqs().map((r, i) => { const b = BLESSINGS.find(x => x.id === r.kind); return `<button class="qc-row bless" data-bless-i="${i}"><span class="qc-ic">${b.icon}</span><span class="qc-tx">${b.name}<small>${esc(r.who)}${b.urgent ? ' · 급해요' : ''}</small></span><span class="qc-go">›</span></button>`; }).join('');
-  return `<div class="qcard"><button class="qc-head" data-qlist="1"><span class="qc-scroll">📜</span>퀘스트<span class="qc-n">${act.length + blessReqs().length}</span></button>${rows}${bl}${rows || bl ? '' : `<div class="qc-wait">새 퀘스트를 기다리는 중…</div>`}</div>`;
+  const act = questActive(), fold = hudFolded();
+  const rows = act.filter(d => !fold || questProgress(d).ok).map(d => { const pr = questProgress(d), ok = pr.ok; return `<button class="qc-row${ok ? ' ok' : ''}" data-quest="${d.id}"><span class="qc-ic">${ok ? '🎁' : d.icon}</span><span class="qc-tx">${d.name}${!ok && pr.want > 1 ? `<small>${Math.min(pr.have, pr.want)}/${pr.want}</small>` : ''}</span>${ok ? '<span class="qc-get">받기</span>' : '<span class="qc-go">›</span>'}</button>`; }).join('');
+  const bl = (fold ? [] : blessReqs()).map((r, i) => { const b = BLESSINGS.find(x => x.id === r.kind); return `<button class="qc-row bless" data-bless-i="${i}"><span class="qc-ic">${b.icon}</span><span class="qc-tx">${b.name}<small>${esc(r.who)}${b.urgent ? ' · 급해요' : ''}</small></span><span class="qc-go">›</span></button>`; }).join('');
+  return `<div class="qcard"><button class="qc-head" data-qlist="1"><span class="qc-scroll">📜</span>퀘스트<span class="qc-n">${act.length + blessReqs().length}</span></button>${rows}${bl}${rows || bl || fold ? '' : `<div class="qc-wait">새 퀘스트를 기다리는 중…</div>`}</div>`;
 }
 function openQuestModal() {
   const act = questActive(), wait = questNextSec(), p = Game.state.pastor;
@@ -3336,6 +3341,12 @@ function boot() {
   document.addEventListener('click', e => {
     const el = e.target.closest('#hud [data-goto]');
     if (el) { e.stopPropagation(); questGoto(el.dataset.goto); return; }
+    if (e.target.closest('#hud [data-hudfold]')) {
+      UI.hudFold = !UI.hudFold;
+      try { localStorage.setItem('sungdang-hud-fold', UI.hudFold ? '1' : '0'); } catch (err) { /* 무시 */ }
+      refreshPastorHud();
+      return;
+    }
     if (e.target.closest('#hud [data-qtoggle]')) {
       UI.questOpen = !UI.questOpen;
       try { localStorage.setItem('sungdang-quest-open', UI.questOpen ? '1' : '0'); } catch (err) { /* 무시 */ }
@@ -3576,5 +3587,5 @@ function openShopMenu(e) {
 // 단추를 누를 때 살짝 딸깍 (v1.06)
 document.addEventListener('pointerdown', e => { if (e.target.closest('button:not(:disabled), .opt, [data-goto]')) Sound.sfx('tap'); }, true);
 // v1.08 사용자 "사무실을 누르는데 사목 방향이 떠", "건물 위 화살표가 안 눌려": 지도를 손가락으로 누르면(pointerup) 창이 뜨고,
-// 브라우저가 곧이어 같은 자리에 보내는 click이 새 창의 단추(사목 방향·닫기 등)를 눌러 버렸다 → 창이 뜬 직후의 click은 버린다
-document.addEventListener('click', e => { if (UI.modalAt && Date.now() - UI.modalAt < 450 && e.target.closest('#modal-root')) { e.stopPropagation(); e.preventDefault(); } }, true);
+// 브라우저가 곧이어 같은 자리에 보내는 click이 새 창의 단추(사목 방향·닫기 등)를 눌러 버렸다 → 창이 뜬 직후(0.35초)의 click은 버린다
+document.addEventListener('click', e => { if (UI.modalAt && Date.now() - UI.modalAt < 350 && e.target.closest('#modal-root')) { e.stopPropagation(); e.preventDefault(); } }, true);

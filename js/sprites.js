@@ -616,7 +616,7 @@ function drawDecor(ctx, b) {
 }
 
 function drawBuildingAny(ctx, b) {
-  if (b.decor) { drawDecor(ctx, b); return; }
+  if (b.decor) { LAST_SPRITE = null; drawDecor(ctx, b); b.spriteHit = LAST_SPRITE; return; } // 조경도 그림의 칠해진 곳으로 누르기 판정 (v1.08)
   LAST_SPRITE = null;
   const top = drawSpriteAt(ctx, spriteKeys(b), b.x, b.y, b.w, b.d, b.rot || 0);
   b.spriteTop = top; b.spriteHit = top ? LAST_SPRITE : null;
