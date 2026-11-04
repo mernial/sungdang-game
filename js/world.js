@@ -621,7 +621,8 @@ function worldResize() {
   const w = window.innerWidth, h = window.innerHeight;
   // 성전 안 평면도는 고운 그림이라 화면 픽셀 그대로 그린다 (레티나는 곱절)
   World.insideRes = typeof insideView === 'function' && insideView();
-  const dpr = window.devicePixelRatio || 1;
+  // v1.08 사용자 "여전히 버퍼링이 좀 있어": 폰은 화면 배율이 3이라 캔버스 픽셀이 너무 많다 → 2배까지만 (눈으로는 거의 차이 없음)
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
   World.scale = World.insideRes ? 1 / dpr : World.overview ? ZOOMS[World.zoomIdx] : (w < 520 ? 2 : 3);
   // 바깥도 화면 픽셀 그대로 그리고(고운 그림이 뭉개지지 않게), 월드 1픽셀 = 캔버스 res픽셀로 키워 그린다
   World.res = World.insideRes ? 1 : World.scale * dpr;
@@ -636,7 +637,7 @@ function worldResize() {
 
 // 바닥을 화면 픽셀 512칸 조각으로 한 번씩 그려 담아 두고 붙여 찍는다 (v0.90). 매 장면 지도 전체를 무늬로 칠하던 게 버벅임의 주범이었다
 // 길을 놓거나 마을을 열면(groundSig가 바뀌면) 다시 그린다. 확대가 바뀌면 그 확대의 조각을 새로 만든다
-const GROUND_CS = 512, GROUND_CHUNKS = new Map();
+const GROUND_CS = 512, GROUND_CHUNKS = new Map(), GROUND_POOL = [];
 function groundSig(m) {
   const p = Game.state.pastor, paths = (p && p.paths) ? Object.keys(p.paths) : [];
   const lots = p && m === MAPS.solmoe && typeof lotsOwned === 'function' ? Object.keys(lotsOwned()).sort().join(',') : '';
@@ -748,8 +749,12 @@ function drawFarm(g, l, P) {
 }
 // area: [왼쪽, 위, 가로, 세로] 캔버스 픽셀 (없으면 i·j번째 512 조각)
 function renderGroundChunk(m, gtex, dtex, res, i, j, area) {
-  const [ax, ay, aw, ah] = area || [i * GROUND_CS, j * GROUND_CS, GROUND_CS, GROUND_CS], c = document.createElement('canvas'); c.width = aw; c.height = ah;
+  // v1.08: 버린 조각의 캔버스를 다시 쓰고(새로 만들면 폰에서 느리다), 흙 무늬용 캔버스는 하나를 돌려 쓴다
+  const [ax, ay, aw, ah] = area || [i * GROUND_CS, j * GROUND_CS, GROUND_CS, GROUND_CS];
+  const c = (!area && GROUND_POOL.pop()) || document.createElement('canvas');
+  if (c.width !== aw || c.height !== ah) { c.width = aw; c.height = ah; }
   const g = c.getContext('2d'), P = 128;
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, aw, ah); g.save(); // 다시 쓰는 캔버스에 지난번 자르기(clip)가 남지 않게 끝에서 restore
   g.setTransform(res, 0, 0, res, -ax, -ay);
   g.beginPath(); const c4 = [iso(0, 0), iso(m.w, 0), iso(m.w, m.h), iso(0, m.h)]; g.moveTo(...c4[0]); for (const q of c4.slice(1)) g.lineTo(...q); g.closePath(); g.clip();
   g.transform(TW / 2 / P, TH / 2 / P, -TW / 2 / P, TH / 2 / P, 0, 0);
@@ -759,8 +764,10 @@ function renderGroundChunk(m, gtex, dtex, res, i, j, area) {
   g.drawImage(groundTint(m), 0, 0, m.w * P, m.h * P);
   // 흙밭 (v1.08 사용자 "풀밭보다 흙밭이 조금 더 많게"): 잡음 가면으로 흙 무늬를 땅의 절반 넘게 덮는다
   if (dtex) {
-    const t = document.createElement('canvas'); t.width = aw; t.height = ah;
-    const tg = t.getContext('2d'); tg.setTransform(g.getTransform()); tg.imageSmoothingEnabled = true;
+    const t = World._dirtTmp || (World._dirtTmp = document.createElement('canvas'));
+    if (t.width !== aw || t.height !== ah) { t.width = aw; t.height = ah; }
+    const tg = t.getContext('2d'); tg.globalCompositeOperation = 'source-over'; tg.setTransform(1, 0, 0, 1, 0, 0); tg.clearRect(0, 0, aw, ah);
+    tg.setTransform(g.getTransform()); tg.imageSmoothingEnabled = true;
     tg.fillStyle = tg.createPattern(dtex, 'repeat'); tg.fillRect(0, 0, m.w * P, m.h * P);
     tg.globalCompositeOperation = 'destination-in'; tg.drawImage(dirtMask(m), 0, 0, m.w * P, m.h * P);
     g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(t, 0, 0); g.restore();
@@ -770,8 +777,12 @@ function renderGroundChunk(m, gtex, dtex, res, i, j, area) {
   // 길 (v1.08 사용자 "흙길이 바닥과 구분이 없다"): 흙바닥과 다른 회색 박석 길 + 가장자리 짙은 테두리
   if (dtex) {
     const pp = Game.state.pastor && Game.state.pastor.paths, isPath = (x, y) => { const k = x + ',' + y; return !World.lockedTiles.has(k) && (World.pathSet.has(k) || !!(pp && pp[k])); };
-    const cells = [];
-    for (let x = 0; x < m.w; x++) for (let y = 0; y < m.h; y++) if (isPath(x, y)) cells.push([x, y]);
+    // 길 칸 목록은 바닥이 바뀔 때만 다시 센다 (조각마다 지도 전체를 훑지 않게)
+    const csig = World.groundSig + '|' + m.w;
+    if (World._pathCellsSig !== csig) { const a = []; for (let x = 0; x < m.w; x++) for (let y = 0; y < m.h; y++) if (isPath(x, y)) a.push([x, y]); World._pathCells = a; World._pathCellsSig = csig; }
+    // 이 조각에 걸치는 길만 그린다
+    const inv = 1 / res, wx0 = ax * inv - TW, wx1 = (ax + aw) * inv + TW, wy0 = ay * inv - TH, wy1 = (ay + ah) * inv + TH;
+    const cells = World._pathCells.filter(([x, y]) => { const [sx, sy] = iso(x + 0.5, y + 0.5); return sx >= wx0 && sx <= wx1 && sy >= wy0 && sy <= wy1; });
     if (cells.length) {
       const main = (x, y) => World.pathSet.has(x + ',' + y); // 지도에 정해진 동네 큰길 = 포장길, 신부가 놓은 길 = 자갈길
       g.beginPath(); for (const [x, y] of cells) if (!main(x, y)) g.rect(x * P, y * P, P, P);
@@ -795,6 +806,7 @@ function renderGroundChunk(m, gtex, dtex, res, i, j, area) {
       }
     }
   }
+  g.restore();
   return c;
 }
 // 지도 전체 바닥을 낮은 해상도로 한 장 (v1.08): 확대·축소 직후 아직 못 그린 조각 자리에 먼저 깔아 둔다
@@ -808,17 +820,19 @@ function groundLow(m, gtex, dtex) {
   return World.groundLow;
 }
 function drawGroundChunks(ctx, m, gtex, dtex, camX, camY, res) {
-  const sig = groundSig(m) + '|' + res;
+  // 조각은 확대 배율(res)마다 따로 담아 둔다 → 확대했다 되돌려도 다시 그리지 않는다 (v1.08)
+  const sig = groundSig(m);
   if (World.groundSig !== sig) { World.groundSig = sig; GROUND_CHUNKS.clear(); }
   const CS = GROUND_CS, x0 = Math.floor(-camX * res / CS), x1 = Math.floor((World.vw - camX) * res / CS), y0 = Math.floor(-camY * res / CS), y1 = Math.floor((World.vh - camY) * res / CS);
-  // 한 장면에 새로 그리는 조각은 몇 개만 (나머지는 낮은 해상도 바닥이 대신 보이다가 다음 장면들에 채워진다)
-  let budget = 3, low = null;
+  // 한 장면에 새로 그리는 조각은 4ms 안에서만 (폰에서 한 장면이 길어지지 않게). 나머지는 낮은 해상도 바닥이 대신 보이다가 다음 장면들에 채워진다
+  const t0 = performance.now();
+  let low = null;
   ctx.imageSmoothingEnabled = false;
   for (let i = x0; i <= x1; i++) for (let j = y0; j <= y1; j++) {
-    const k = i + ',' + j;
+    const k = res + '|' + i + ',' + j;
     let c = GROUND_CHUNKS.get(k);
     if (c) GROUND_CHUNKS.delete(k);
-    else if (budget-- > 0) c = renderGroundChunk(m, gtex, dtex, res, i, j);
+    else if (performance.now() - t0 < 4) c = renderGroundChunk(m, gtex, dtex, res, i, j);
     else {
       low = low || groundLow(m, gtex, dtex);
       const L = low, wx = i * CS / res, wy = j * CS / res, ws = CS / res, sx = (wx - L.x) / L.w * L.c.width, sy = wy / L.h * L.c.height, sw = ws / L.w * L.c.width, sh = ws / L.h * L.c.height;
@@ -828,7 +842,20 @@ function drawGroundChunks(ctx, m, gtex, dtex, camX, camY, res) {
     GROUND_CHUNKS.set(k, c);
     ctx.drawImage(c, i * CS / res, j * CS / res, CS / res, CS / res);
   }
-  while (GROUND_CHUNKS.size > 90) GROUND_CHUNKS.delete(GROUND_CHUNKS.keys().next().value); // 오래 안 본 조각부터 버린다
+  while (GROUND_CHUNKS.size > 60) { const k0 = GROUND_CHUNKS.keys().next().value; if (GROUND_POOL.length < 8) GROUND_POOL.push(GROUND_CHUNKS.get(k0)); GROUND_CHUNKS.delete(k0); } // 오래 안 본 조각부터 버린다 (조각 하나 1MB, 캔버스는 다시 쓴다)
+  // 쉬는 틈에 화면 둘레 한 줄 조각을 미리 그려 둔다 (끌어 움직일 때 새 조각을 그리느라 멈칫하지 않게)
+  // 아이폰 사파리는 requestIdleCallback이 없어 잠깐 쉰 뒤 8ms만 쓰는 것으로 대신한다
+  const idle = window.requestIdleCallback || ((fn) => setTimeout(() => { const s0 = performance.now(); fn({ timeRemaining: () => 14 - (performance.now() - s0) }); }, 150));
+  if (!World.groundIdle) {
+    World.groundIdle = idle(dl => {
+      World.groundIdle = null;
+      for (let i = x0 - 1; i <= x1 + 1; i++) for (let j = y0 - 1; j <= y1 + 1; j++) {
+        if (dl.timeRemaining() < 6) return;
+        const k = res + '|' + i + ',' + j;
+        if (!GROUND_CHUNKS.has(k) && World.groundSig === sig && World.res === res) GROUND_CHUNKS.set(k, renderGroundChunk(m, gtex, dtex, res, i, j));
+      }
+    }, { timeout: 500 });
+  }
 }
 
 function worldDraw() {
