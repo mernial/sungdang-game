@@ -1,5 +1,7 @@
 // 성당 키우기: 효과음과 목소리 (v1.06 · 목소리 v1.08)
-// 효과음은 소리 파일 없이 Web Audio로 그 자리에서 만든다 (저작권 걱정 없음, 내려받을 것 없음).
+// 효과음 (v1.08 사용자 "효과음 퀄이 너무 떨어져, 고급스럽게"): tools/make-sfx.py가 하프·첼레스타·나무 타악기·교회 종을
+// 물리 모형으로 합성하고 성당 울림을 입혀 만든 assets/sfx/<이름>.mp3를 쓴다 (저작권 걱정 없음).
+// 파일을 아직 못 받았으면 예전처럼 Web Audio로 그 자리에서 만든 소리로 대신한다.
 // 사람의 말은 미리 녹음한 목소리 파일로 (v1.08, 아래 '목소리').
 // 설정에서 효과음·목소리를 따로 끌 수 있다 (localStorage 'sungdang-sound' = { sfx, voice })
 
@@ -11,7 +13,23 @@ const Sound = (() => {
   const unlock = () => {
     if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); master = ac.createGain(); master.gain.value = 0.5; master.connect(ac.destination); } catch (e) { return; } }
     if (ac.state === 'suspended') ac.resume();
+    loadFiles();
   };
+  // 미리 만든 효과음 파일: 처음 소리를 낼 수 있게 되면 한 번에 받아 풀어 둔다
+  const FILE_GAIN = { tap: 0.45, open: 0.32, page: 0.45, coin: 0.8, quest: 0.8, reward: 0.85, build: 0.7, done: 0.8, clear: 0.7, bell: 0.9, bless: 0.75, error: 0.6, meet: 0.8 };
+  const bufs = {}; let loading = false;
+  function loadFiles() {
+    if (loading || !ac) return; loading = true;
+    for (const name of Object.keys(FILE_GAIN)) fetch(`assets/sfx/${name}.mp3?v=1`).then(r => r.ok ? r.arrayBuffer() : Promise.reject()).then(a => new Promise((ok, no) => ac.decodeAudioData(a, ok, no))).then(b => { bufs[name] = b; }).catch(() => {});
+  }
+  const lastAt = {};
+  function playFile(name) {
+    const b = bufs[name]; if (!b) return false;
+    const now = ac.currentTime; if (lastAt[name] && now - lastAt[name] < 0.04) return true; lastAt[name] = now; // 같은 소리가 겹쳐 쌓이지 않게
+    const src = ac.createBufferSource(), g = ac.createGain();
+    src.buffer = b; g.gain.value = FILE_GAIN[name] * 1.4; src.connect(g); g.connect(master); src.start();
+    return true;
+  }
   ['pointerdown', 'keydown', 'touchstart'].forEach(ev => document.addEventListener(ev, unlock, { passive: true }));
 
   // 음 하나: 주파수, 시작(초 뒤), 길이, 파형, 크기
@@ -51,7 +69,7 @@ const Sound = (() => {
   function sfx(name) {
     if (!pref.sfx || !SFX[name]) return;
     unlock(); if (!ac) return;
-    try { SFX[name](); } catch (e) { /* 소리는 실패해도 게임은 그대로 */ }
+    try { if (!playFile(name)) SFX[name](); } catch (e) { /* 소리는 실패해도 게임은 그대로 */ }
   }
   // 알림 글의 첫 그림 글자로 알맞은 소리를 고른다
   function sfxForText(msg) {
