@@ -1561,6 +1561,17 @@ function togglePath(x, y) {
   return { ok: true };
 }
 
+// 길 한 칸 옮기기 (v1.08): 새 자리가 길을 놓을 수 있는 곳이어야 한다. 무료
+function movePath(fx, fy, tx, ty) {
+  const p = Game.state.pastor, ps = p.paths || {};
+  if (!ps[fx + ',' + fy]) return '옮길 길이 없어요';
+  if (ps[tx + ',' + ty]) return '거기엔 이미 길이 있어요';
+  const why = MAPS.solmoe.canPath(tx, ty);
+  if (why) return why;
+  delete ps[fx + ',' + fy]; ps[tx + ',' + ty] = true;
+  return '길을 옮겼어요';
+}
+
 // 새 건물을 (x, y)에 놓고 공사를 시작한다 (교리실·공소)
 // 성전 안 본당: 교리실은 땅이 아니라 건물 안에 들인다 (자리 없이)
 function insideParish() { const p = Game.state.pastor; return !!(p && (PARISHES[p.parishId] || {}).interior); }
@@ -2543,7 +2554,7 @@ function fenceEdges() {
   }
   return out;
 }
-function fenceCost(level) { return scaledCost(FENCE_LEVELS[level].per * fenceEdges().length); }
+function fenceCost(level) { return Math.round(FENCE_LEVELS[level].per * fenceEdges().length / 10) * 10; }
 function fenceBlocker() {
   const p = Game.state.pastor, to = (p.fence || 0) + 1, f = FENCE_LEVELS[to];
   if (!f) return '가장 좋은 담장이에요';

@@ -289,19 +289,24 @@ function pickAt(clientX, clientY) {
     const [nx, ny] = iso(n.x, n.y), top = npcBubble(n) ? 34 : 30;
     if (Math.abs(sx - nx) <= 8 + sl && sy <= ny + 3 + sl && sy >= ny - top - sl) return { npc: n };
   }
-  let best = null;
-  for (const b of World.buildings) {
-    // 건물 모양(바닥 마름모를 높이만큼 세운 육각형) 안에 있는지
+  // 건물 모양(바닥 마름모를 높이만큼 세운 육각형, e만큼 넉넉히) 안에 있는지
+  const inHex = (b, e) => {
     const A = iso(b.x, b.y), B = iso(b.x + b.w, b.y), C = iso(b.x + b.w, b.y + b.d), D = iso(b.x, b.y + b.d);
-    if (sx < D[0] || sx > B[0]) continue;
-    const at = (p, q) => p[1] + (q[1] - p[1]) * (sx - p[0]) / (q[0] - p[0] || 1);
-    const lower = sx <= C[0] ? at(D, C) : at(C, B), upper = sx <= A[0] ? at(D, A) : at(A, B);
+    if (sx < D[0] - e || sx > B[0] + e) return false;
+    const x = Math.min(B[0], Math.max(D[0], sx)), at = (p, q) => p[1] + (q[1] - p[1]) * (x - p[0]) / (q[0] - p[0] || 1);
+    const lower = x <= C[0] ? at(D, C) : at(C, B), upper = x <= A[0] ? at(D, A) : at(A, B);
     const top = b.spriteTop ? b.spriteTop[1] : A[1] - (b.h || 14) - 22;
-    if (sy > lower || sy < upper - (A[1] - top)) continue;
-    const depth = b.x + b.w + b.y + b.d;
-    if (!best || depth > best.depth) best = { building: b, depth };
-  }
-  if (best) return { building: best.building };
+    return sy <= lower + e && sy >= upper - (A[1] - top) - e;
+  };
+  // v1.08 사용자 "건물을 누를 때도 인식 잘 못할 때가 있어": 육각형만 보면 앞 건물의 지붕 옆 빈 하늘이 뒤 건물을 가렸다.
+  // 앞(깊은) 건물부터 누른 자리가 그림의 칠해진 부분인지 보고, 손가락이면 둘레도 조금 본다
+  const byDepth = World.buildings.filter(b => inHex(b, sl)).sort((a, b) => (b.x + b.w + b.y + b.d) - (a.x + a.w + a.y + a.d));
+  const ring = sl > 1 ? [[0, 0], [sl / 2, 0], [-sl / 2, 0], [0, sl / 2], [0, -sl / 2]] : [[0, 0]];
+  for (const [ox, oy] of ring) for (const b of byDepth) if (spriteOpaqueAt(b, sx + ox, sy + oy)) return { building: b };
+  // 그림 자리를 모르는(코드로 그린) 건물은 예전처럼 육각형으로.
+  // 칠해진 곳이 하나도 없으면(그림 사이 빈 곳) 예전처럼 육각형 안의 앞 건물
+  const plain = byDepth.find(b => !b.spriteHit && inHex(b, 0)) || byDepth.find(b => inHex(b, 0)) || byDepth.find(b => !b.spriteHit);
+  if (plain) return { building: plain };
   const tx = Math.floor((sx / (TW / 2) + sy / (TH / 2)) / 2), ty = Math.floor((sy / (TH / 2) - sx / (TW / 2)) / 2);
   // 아직 안 산 본당 땅: 누르면 땅 사기
   if (World.overview && World.map === MAPS.solmoe && !tileRegion(tx, ty) && tx >= 0 && ty >= 0 && !lotOwnedAt(tx, ty)) return { lot: lotAt(tx, ty) };
@@ -1012,6 +1017,12 @@ function worldDraw() {
     ctx.globalAlpha = 1;
   }
   if (World.placing) drawPlacing(ctx, World.placing);
+  if (World.pathDrag) { // 옮기는 길 칸: 원래 자리는 흐리게, 옮길 자리는 금빛(못 놓으면 붉게)
+    const { from: [fx, fy], at: [ax, ay] } = World.pathDrag, sq = (x, y) => [iso(x, y), iso(x + 1, y), iso(x + 1, y + 1), iso(x, y + 1)];
+    const same = fx === ax && fy === ay, ok = same || (!Game.state.pastor.paths[ax + ',' + ay] && !World.map.canPath(ax, ay));
+    poly(ctx, sq(fx, fy), 'rgba(0,0,0,.18)', 'rgba(255,255,255,.6)');
+    poly(ctx, sq(ax, ay), ok ? 'rgba(242,193,78,.55)' : 'rgba(220,70,60,.45)', ok ? '#c79a2b' : '#a33');
+  }
   if (World.pathMode && Game.state.pastor) for (const k of Object.keys(Game.state.pastor.paths || {})) {
     const [x, y] = k.split(',').map(Number);
     poly(ctx, [iso(x, y), iso(x + 1, y), iso(x + 1, y + 1), iso(x, y + 1)], 'rgba(242,193,78,.25)', '#c79a2b');
@@ -1165,6 +1176,14 @@ function worldInit(onInteract) {
             d0.ghost = [tx - pl.x, ty - pl.y];
             d0.longPressed = true;
             if (navigator.vibrate) try { navigator.vibrate(15); } catch (err) { /* 무시 */ }
+          } else if (!(hit && (hit.building || hit.npc || hit.upgrade || hit.bubble)) && World.onPathMove) {
+            // v1.08 사용자 "바닥 타일도 꾹 누르면 이동가능하도록": 깔아 둔 길 칸을 꾹 누르면 들어 올려 끌어서 옮긴다
+            const [tx, ty] = tileAt(cx, cy).map(Math.floor), ps = Game.state.pastor && Game.state.pastor.paths;
+            if (ps && ps[tx + ',' + ty]) {
+              d0.pathGrab = World.pathDrag = { from: [tx, ty], at: [tx, ty] };
+              d0.longPressed = true;
+              if (navigator.vibrate) try { navigator.vibrate(15); } catch (err) { /* 무시 */ }
+            }
           }
         }, e.pointerType === 'touch' ? 700 : 550);
       }
@@ -1191,6 +1210,7 @@ function worldInit(onInteract) {
     if (!drag) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     drag.moved = Math.max(drag.moved, Math.hypot(dx, dy));
+    if (drag.pathGrab) { drag.pathGrab.at = tileAt(e.clientX, e.clientY).map(Math.floor); return; }
     if (drag.ghost && World.placing) {
       const [tx, ty] = tileAt(e.clientX, e.clientY);
       const nx = Math.round(tx - drag.ghost[0]), ny = Math.round(ty - drag.ghost[1]);
@@ -1204,6 +1224,7 @@ function worldInit(onInteract) {
     if (!World.overview || !ptrs.has(e.pointerId)) return;
     ptrs.delete(e.pointerId);
     if (drag && drag.lp) clearTimeout(drag.lp);
+    if (drag && drag.pathGrab) { const g = drag.pathGrab; World.pathDrag = null; drag = null; if (e.type === 'pointerup' && World.onPathMove) World.onPathMove(g.from, g.at); return; }
     if (drag && drag.longPressed) { drag = null; return; }
     if (drag && drag.moved <= drag.tap && e.type === 'pointerup' && !World.isPaused()) {
       if (World.pathMode) {

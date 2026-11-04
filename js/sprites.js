@@ -518,12 +518,14 @@ function warpSprite(img, mt, w, d, key) {
   }
   return (WARP_CACHE[ck] = { c, ox, oy });
 }
+// 마지막으로 그린 건물 그림의 자리 (누른 곳이 그림의 칠해진 부분인지 보려고, js/world.js pickAt)
+let LAST_SPRITE = null;
 function drawSpriteAt(ctx, keys, x, y, w, d, rot = 0) {
   for (const k0 of keys) {
     const turned = rot ? getSprite(`${k0}@${rot}`) : null, k = k0, img = turned || getSprite(k);
     if (!img) continue;
     const flip = !turned && rot % 2 === 1;
-    if (flip) { const cx0 = (iso(x, y + d)[0] + iso(x + w, y)[0]) / 2; ctx.save(); ctx.translate(cx0 * 2, 0); ctx.scale(-1, 1); const r = drawSpriteAt(ctx, [k], x, y, w, d, 0); ctx.restore(); return r; }
+    if (flip) { const cx0 = (iso(x, y + d)[0] + iso(x + w, y)[0]) / 2; ctx.save(); ctx.translate(cx0 * 2, 0); ctx.scale(-1, 1); const r = drawSpriteAt(ctx, [k], x, y, w, d, 0); ctx.restore(); if (LAST_SPRITE) LAST_SPRITE.flip = cx0 * 2; return r; }
     const cx = Math.round((iso(x, y + d)[0] + iso(x + w, y)[0]) / 2);
     const by = Math.round(iso(x + w, y + d)[1]);
     if (SPRITE_HD.has(k)) {
@@ -543,6 +545,7 @@ function drawSpriteAt(ctx, keys, x, y, w, d, rot = 0) {
         if (warped) {
           ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(warped.c, fx - warped.ox, fy - warped.oy, warped.c.width / WARP_S, warped.c.height / WARP_S);
+          LAST_SPRITE = { c: warped.c, x: fx - warped.ox, y: fy - warped.oy, s: WARP_S };
           ctx.imageSmoothingEnabled = false;
           return [cx, fy - warped.oy];
         }
@@ -614,12 +617,22 @@ function drawDecor(ctx, b) {
 
 function drawBuildingAny(ctx, b) {
   if (b.decor) { drawDecor(ctx, b); return; }
+  LAST_SPRITE = null;
   const top = drawSpriteAt(ctx, spriteKeys(b), b.x, b.y, b.w, b.d, b.rot || 0);
-  b.spriteTop = top;
+  b.spriteTop = top; b.spriteHit = top ? LAST_SPRITE : null;
   if (top) return;
   if (b.scaffold) drawScaffold(ctx, b);
   else if (b.style === 'container') drawContainer(ctx, b);
   else drawBuilding(ctx, b);
+}
+
+// 그림의 (sx, sy) 자리가 칠해져 있는지 (지도 좌표). 그림 자리를 모르면 null
+function spriteOpaqueAt(b, sx, sy) {
+  const h = b.spriteHit;
+  if (!h || !h.c) return null;
+  const x = h.flip !== undefined ? h.flip - sx : sx, px = Math.floor((x - h.x) * h.s), py = Math.floor((sy - h.y) * h.s);
+  if (px < 0 || py < 0 || px >= h.c.width || py >= h.c.height) return false;
+  try { return h.c.getContext('2d').getImageData(px, py, 1, 1).data[3] > 40; } catch (e) { return null; }
 }
 
 // ---------- 짓기 관련 ----------

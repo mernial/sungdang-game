@@ -1924,12 +1924,13 @@ const LOTS = [  // farm: 이 땅에 군데군데 있는 마을 사람의 밭(fie
 // v0.80: 지도를 두 배 칸으로 나눴다 (maps.js MAP_GRID)
 for (const l of LOTS) { l.x *= 2; l.y *= 2; l.w *= 2; l.h *= 2; }
 // 울타리: 산 땅 둘레에 두른다. 레벨이 오를수록 좋은 울타리로 바뀌고, 둘레가 길수록 비싸다
+// per: 담 한 칸 값(고정, v1.08 사용자 "나무펜스 가격이 왜 이렇게 비싸" — 살림 규모에 따라 오르던 것을 땅값처럼 고정)
 const FENCE_LEVELS = [  // v1.07: 사용자 "낡은 펜스 → 새 펜스 → 시멘트 담벼락 → 벽돌 화단" (그림 assets/sprites/fence-lv1~4, tools/blender/make-fence.py)
   null,
-  { name: '낡은 나무 펜스', icon: '🪵', per: 0.75, church: 1, heart: 1, rep: 0, desc: '얻어 온 판자로 세운 비뚤비뚤한 펜스. 그래도 어디까지가 성당인지는 알 수 있어요' },
-  { name: '새 하얀 펜스', icon: '🤍', per: 1.5, church: 3, heart: 2, rep: 1, desc: '하얗게 칠한 새 나무 펜스. 마당이 단정해 보여요' },
-  { name: '시멘트 담벼락', icon: '🧱', per: 2.5, church: 5, heart: 3, rep: 2, desc: '시멘트 블록을 쌓고 갓돌을 얹은 튼튼한 담' },
-  { name: '벽돌 화단 담', icon: '🌷', per: 4, church: 7, heart: 4, rep: 3, desc: '붉은 벽돌로 쌓은 화단 담. 꽃이 피어 지나는 사람도 웃어요' },
+  { name: '낡은 나무 펜스', icon: '🪵', per: 2, church: 1, heart: 1, rep: 0, desc: '얻어 온 판자로 세운 비뚤비뚤한 펜스. 그래도 어디까지가 성당인지는 알 수 있어요' },
+  { name: '새 하얀 펜스', icon: '🤍', per: 5, church: 3, heart: 2, rep: 1, desc: '하얗게 칠한 새 나무 펜스. 마당이 단정해 보여요' },
+  { name: '시멘트 담벼락', icon: '🧱', per: 10, church: 5, heart: 3, rep: 2, desc: '시멘트 블록을 쌓고 갓돌을 얹은 튼튼한 담' },
+  { name: '벽돌 화단 담', icon: '🌷', per: 18, church: 7, heart: 4, rep: 3, desc: '붉은 벽돌로 쌓은 화단 담. 꽃이 피어 지나는 사람도 웃어요' },
 ];
 
 const DECOR = {

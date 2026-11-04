@@ -75,7 +75,7 @@ function nextModal() {
   const root = document.getElementById('modal-root');
   const opts = UI.modalQueue.shift();
   if (!opts) { UI.modalOpen = false; root.innerHTML = ''; return; }
-  UI.modalOpen = true;
+  UI.modalOpen = true; UI.modalAt = Date.now();
   World.keys = {};
   if (typeof Sound !== 'undefined') Sound.sfx('open');
   const buttons = [...(opts.buttons || (opts.options ? [{ label: '닫기', cls: 'ghost' }] : [{ label: '확인' }]))];
@@ -1770,6 +1770,12 @@ function onPathTap(x, y) {
   const n = document.getElementById('path-info');
   if (n) n.outerHTML = pathInfoHtml();
 }
+// 꾹 눌러 든 길 칸을 다른 칸으로 옮긴다 (돈은 들지 않는다)
+function onPathMove([fx, fy], [tx, ty]) {
+  if (fx === tx && fy === ty) return;
+  const m = movePath(fx, fy, tx, ty);
+  toast(`🛤️ ${m}`); save();
+}
 function pathInfoHtml() {
   const n = Object.keys(Game.state.pastor.paths || {}).length;
   return `<div class="place-info" id="path-info"><b>🛤️ 길 놓기</b> <span class="muted">한 칸 💰${PATH_COST} · 놓은 길 ${n}칸</span><br><span class="ok">땅을 누르면 길, 길을 누르면 걷기</span></div>`;
@@ -1907,7 +1913,15 @@ function obActionInfo(o) {
 function doObAction(id) {
   const o = obstacleById(id), j = jobFor(id);
   if (!o) return;
-  if (j) { World.obSel = null; openObstacleMenu(o); return; }
+  // v1.08 사용자 "나무 벨 때 바로 완료를 다이아로 쓰려고 했더니 안 돼": 버튼에 '💎N 바로'라고 적혀 있으니 누르면 바로 끝낸다
+  // (예전엔 창을 한 번 더 띄웠고, 폰에서는 그 창이 뜨자마자 같은 누름이 '닫기'를 눌러 버렸다)
+  if (j) {
+    World.obSel = null;
+    if (gems() < rushCost(j)) { toast(`💎 다이아가 모자라요 (필요 ${rushCost(j)} · 가진 ${gems()})`); setTimeout(openGemShop, 0); return; }
+    const m = rushJob(j);
+    if (m) { toast(`💎 ${m}`); save(); syncWorldLayout && syncWorldLayout(); refreshPastorHud(); }
+    return;
+  }
   const block = clearBlocker(id);
   if (block) { toast(block); return; }
   const m = clearObstacle(id);
@@ -3316,6 +3330,7 @@ function boot() {
   World.onPlaceMove = movePlacing;
   World.onLongPress = startMoving;
   World.onPathTap = onPathTap;
+  World.onPathMove = onPathMove;
   document.addEventListener('click', e => {
     const el = e.target.closest('#hud [data-goto]');
     if (el) { e.stopPropagation(); questGoto(el.dataset.goto); return; }
@@ -3536,3 +3551,6 @@ function openShopMenu(e) {
 
 // 단추를 누를 때 살짝 딸깍 (v1.06)
 document.addEventListener('pointerdown', e => { if (e.target.closest('button:not(:disabled), .opt, [data-goto]')) Sound.sfx('tap'); }, true);
+// v1.08 사용자 "사무실을 누르는데 사목 방향이 떠", "건물 위 화살표가 안 눌려": 지도를 손가락으로 누르면(pointerup) 창이 뜨고,
+// 브라우저가 곧이어 같은 자리에 보내는 click이 새 창의 단추(사목 방향·닫기 등)를 눌러 버렸다 → 창이 뜬 직후의 click은 버린다
+document.addEventListener('click', e => { if (UI.modalAt && Date.now() - UI.modalAt < 450 && e.target.closest('#modal-root')) { e.stopPropagation(); e.preventDefault(); } }, true);
