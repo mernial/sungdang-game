@@ -3402,6 +3402,27 @@ function boot() {
   document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 }
 
+// 새 버전 알림 (v1.08 사용자 "업데이트가 저절로"): 공개 주소의 index.html을 가끔 다시 읽어 js 꼬리표(v=)가 지금보다 크면
+// 위쪽에 "새 버전" 띠를 띄운다. 누르면 저장하고 새로 고친다 (게임을 켜 둔 채 두어도 알 수 있게)
+const APP_V = +((document.querySelector('script[src*="js/ui.js"]') || {}).src || '').replace(/.*[?&]v=(\d+).*/, '$1') || 0;
+async function checkUpdate() {
+  if (!APP_V || location.protocol === 'file:' || document.getElementById('update-bar')) return;
+  try {
+    const t = await (await fetch(`index.html?u=${Date.now()}`, { cache: 'no-store' })).text();
+    const v = +((t.match(/js\/ui\.js\?v=(\d+)/) || [])[1] || 0);
+    if (v > APP_V) {
+      const bar = document.createElement('button');
+      bar.id = 'update-bar'; bar.type = 'button';
+      bar.innerHTML = '✨ 새 버전이 나왔어요 · <b>눌러서 새로 고치기</b>';
+      bar.onclick = () => { try { save(); } catch (e) { /* 무시 */ } location.reload(); };
+      document.body.appendChild(bar);
+    }
+  } catch (e) { /* 인터넷이 없으면 다음에 */ }
+}
+setTimeout(checkUpdate, 15000);
+setInterval(checkUpdate, 3 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(); });
+
 boot();
 
 

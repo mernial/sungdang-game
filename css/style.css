@@ -1085,3 +1085,9 @@ body:has(#app .vn) #app { max-width: none; padding: 0; }
 #talk .txt { animation: vn-line .4s ease-out; margin: 0 0 10px; }
 #talk .talk-replies { display: flex; }
 .modal.say .serif { text-align: left; }
+
+/* 새 버전 알림 띠 (v1.08) */
+#update-bar { position: fixed; z-index: 9999; left: 50%; transform: translateX(-50%); top: calc(64px + env(safe-area-inset-top)); max-width: calc(100vw - 32px);
+  background: #2b6b3f; color: #fff; border: 2px solid #f2d27a; border-radius: 999px; padding: 10px 18px; font: inherit; font-size: 14px; box-shadow: 0 6px 18px rgba(0,0,0,.3); cursor: pointer; animation: upd-pop .4s ease-out; }
+#update-bar b { color: #ffe9a8; }
+@keyframes upd-pop { from { transform: translate(-50%, -12px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
