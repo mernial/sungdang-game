@@ -126,7 +126,7 @@ function drawInterior(ctx, c) {
   const site = cur && cur[1], plan = World.floor === 1 ? INTERIOR_PLANS.ground : INTERIOR_PLANS.upper;
   // 도면 그림은 바뀔 때만 새로 그려 둔다
   const m = tw, sig = [Math.round(tw * 100), World.floor, site && site.built, plan.rooms.map(r => roomArt(r, site)).join(',')].join('|');
-  if (!World.interiorCache || World.interiorCache.sig !== sig) {
+  if ((!World.interiorCache || World.interiorCache.sig !== sig) && !(typeof W3 !== 'undefined' && W3.persp && W3.inside)) {
     const off = (World.interiorCache && World.interiorCache.cv) || document.createElement('canvas');
     off.width = Math.ceil(W + m * 2); off.height = Math.ceil(H + m * 2);
     const o = off.getContext('2d');
@@ -134,10 +134,11 @@ function drawInterior(ctx, c) {
     drawPlan(o, plan, site, isoKit(o, m + PLAN_D * tw / 2, m + WALL_OUT * 0.62 * tw, tw));
     World.interiorCache = { sig, cv: off };
   }
-  ctx.fillStyle = '#3a3029'; ctx.fillRect(0, 0, c.width, c.height);
-  ctx.drawImage(World.interiorCache.cv, zx - m, zy - m);
+  const in3 = typeof W3 !== 'undefined' && W3.persp && W3.inside; // v1.10 입체 성전 안: 방·가구는 아래 입체 캔버스가 그린다
+  if (!in3) { ctx.fillStyle = '#3a3029'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(World.interiorCache.cv, zx - m, zy - m); }
   // 방 누르기·이름표
   const K = isoKit(ctx, ox, oy, tw);
+  if (in3) K.S = W3.projIn;
   for (const r of plan.rooms) {
     const [x, y, w, d] = r.rect, pts = [K.S(x, y), K.S(x + w, y), K.S(x + w, y + d), K.S(x, y + d)];
     const at = K.S(x + w / 2, y + d / 2, 0.15);

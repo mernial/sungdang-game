@@ -60,6 +60,7 @@ function npcVisible(n) {
 }
 
 function clampCam() {
+  if (typeof W3 !== 'undefined' && W3.persp) { W3.clampView(); return; }
   const m = World.map, c = World.canvas;
   const left = iso(0, m.h)[0], right = iso(m.w, 0)[0], bottom = iso(m.w, m.h)[1];
   const hw = World.vw / 2, hh = World.vh / 2;
@@ -69,6 +70,7 @@ function clampCam() {
 }
 
 function worldZoom(step, anchorX, anchorY) {
+  if (typeof insideView === 'function' && insideView() && typeof W3 !== 'undefined' && W3.persp) { W3.zoom(step, anchorX, anchorY); return; }
   if (typeof insideView === 'function' && insideView()) {
     // 성전 안 도면: 가리키는 곳이 그대로 남도록 키우고 줄인다 (1~3배)
     const c = World.canvas, r = c.getBoundingClientRect(), k = 1 / World.scale, z0 = World.inZoom || 1, z1 = clamp(z0 * (step > 0 ? 1.4 : 1 / 1.4), 1, 3);
@@ -79,6 +81,7 @@ function worldZoom(step, anchorX, anchorY) {
     World.inZoom = z1 < 1.05 ? 1 : z1;
     return;
   }
+  if (typeof W3 !== 'undefined' && W3.persp) { W3.zoom(step, anchorX, anchorY); return; }
   const i = clamp(World.zoomIdx + step, 0, ZOOMS.length - 1);
   if (i === World.zoomIdx) return;
   // 손가락·마우스가 가리키는 곳이 그대로 남도록
@@ -93,7 +96,7 @@ function worldZoom(step, anchorX, anchorY) {
   clampCam();
 }
 
-function centerOn(x, y) { if (!World.overview) return; World.cam = iso(x, y); clampCam(); }
+function centerOn(x, y) { if (!World.overview) return; if (typeof W3 !== 'undefined' && W3.persp) { W3.lookAt(x, y); return; } World.cam = iso(x, y); clampCam(); }
 
 // 이웃 동네 종교 공동체 이름표 둘째 줄: 종교와 신자 수
 function religionLine(b) {
@@ -199,14 +202,14 @@ function drawClearFx(ctx) {
 function tileAt(clientX, clientY) {
   const r = World.canvas.getBoundingClientRect();
   const sx = (clientX - r.left) / World.scale - World.camOff[0], sy = (clientY - r.top) / World.scale - World.camOff[1];
-  return [(sx / (TW / 2) + sy / (TH / 2)) / 2, (sy / (TH / 2) - sx / (TW / 2)) / 2];
+  return isoInv(sx, sy);
 }
 
 // 조경 놓기: 반투명 그림과 초록·빨강 바닥
 function drawDecorGhost(ctx, pl) {
   const [dw, dd] = sizeOf(pl.kind, pl.rot), foot = [iso(pl.x, pl.y), iso(pl.x + dw, pl.y), iso(pl.x + dw, pl.y + dd), iso(pl.x, pl.y + dd)];
   poly(ctx, foot, pl.ok ? 'rgba(60, 191, 104, .5)' : 'rgba(224, 71, 58, .5)', pl.ok ? '#3cbf68' : '#e0473a');
-  ctx.globalAlpha = 0.7; drawDecor(ctx, { decor: pl.kind, x: pl.x, y: pl.y, w: dw, d: dd, rot: pl.rot || 0 }); ctx.globalAlpha = 1;
+  if (!(typeof W3 !== 'undefined' && W3.active())) { ctx.globalAlpha = 0.7; drawDecor(ctx, { decor: pl.kind, x: pl.x, y: pl.y, w: dw, d: dd, rot: pl.rot || 0 }); ctx.globalAlpha = 1; }
 }
 
 // 반투명 건물: 놓을 수 있으면 초록, 없으면 빨강
@@ -218,12 +221,13 @@ function drawPlacing(ctx, pl) {
     if (!orig) return;
     const b = { ...orig, x: pl.x, y: pl.y, w, d, rot, door: { ...orig.door, side } };
     poly(ctx, [iso(b.x, b.y), iso(b.x + w, b.y), iso(b.x + w, b.y + d), iso(b.x, b.y + d)], pl.ok ? 'rgba(60, 191, 104, .45)' : 'rgba(224, 71, 58, .45)', pl.ok ? '#3cbf68' : '#e0473a');
-    ctx.globalAlpha = 0.8; drawBuildingAny(ctx, b); ctx.globalAlpha = 1;
+    const g3 = typeof W3 !== 'undefined' && W3.active();
+    if (!g3) { ctx.globalAlpha = 0.8; drawBuildingAny(ctx, b); ctx.globalAlpha = 1; }
     // 테두리와 ✔·✖는 건물 위에 한 번 더 (가려도 보이게)
     const col = pl.ok ? '#3cbf68' : '#e0473a', k = Math.max(1, 2 / World.scale);
     ctx.strokeStyle = col; ctx.lineWidth = 1.5 * k; ctx.setLineDash([4 * k, 3 * k]);
     ctx.beginPath(); ctx.moveTo(...iso(b.x, b.y)); ctx.lineTo(...iso(b.x + w, b.y)); ctx.lineTo(...iso(b.x + w, b.y + d)); ctx.lineTo(...iso(b.x, b.y + d)); ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
-    const [tx, ty] = iso(b.x + w / 2, b.y + d / 2), top = b.spriteTop ? b.spriteTop[1] : ty - (b.h || 13) - 6;
+    const [tx, ty] = iso(b.x + w / 2, b.y + d / 2), top = g3 && W3.ghostTop ? W3.ghostTop[1] : b.spriteTop && !g3 ? b.spriteTop[1] : ty - (b.h || 13) - 6;
     ctx.fillStyle = col; ctx.beginPath(); ctx.arc(tx, top - 8 * k, 6 * k, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.round(8 * k)}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(pl.ok ? '✔' : '✖', tx, top - 8 * k); ctx.textBaseline = 'alphabetic';
@@ -245,7 +249,13 @@ function drawPlacing(ctx, pl) {
   const foot = [iso(b.x, b.y), iso(b.x + w, b.y), iso(b.x + w, b.y + d), iso(b.x, b.y + d)];
   const col = pl.ok ? '#3cbf68' : '#e0473a';
   poly(ctx, foot, pl.ok ? 'rgba(60, 191, 104, .5)' : 'rgba(224, 71, 58, .5)', col);
-  // 건물을 따로 그려 초록·빨강으로 물들인 뒤 반투명하게 얹는다
+  // 건물을 따로 그려 초록·빨강으로 물들인 뒤 반투명하게 얹는다 (입체 화면에서는 입체 모형이 대신 선다)
+  if (typeof W3 !== 'undefined' && W3.active()) {
+    const [tx, ty] = iso(b.x + w / 2, b.y + d / 2), top = W3.ghostTop ? W3.ghostTop[1] : ty - 40;
+    ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = pl.ok ? '#2f9e55' : '#c0392b';
+    ctx.fillText(pl.ok ? '✔' : '✖', tx, top - 6);
+    return;
+  }
   const off = drawPlacing.off || (drawPlacing.off = document.createElement('canvas'));
   off.width = 200; off.height = 160;
   const o = off.getContext('2d'), [ax, ay] = iso(b.x + w / 2, b.y + d / 2);
@@ -281,7 +291,7 @@ function pickAt(clientX, clientY) {
   // (뒤쪽에 놓은 작은 조경이 앞 건물의 ⬆ 둘레에 가려 안 눌리던 것)
   if (bubble && bubble.core && !(px >= bubble.core.x && px <= bubble.core.x + bubble.core.w && py >= bubble.core.y && py <= bubble.core.y + bubble.core.h)) {
     const sx0 = px - World.camOff[0], sy0 = py - World.camOff[1];
-    const ftx = (sx0 / (TW / 2) + sy0 / (TH / 2)) / 2, fty = (sy0 / (TH / 2) - sx0 / (TW / 2)) / 2; // 누른 바닥 칸 (그림 없는 조경은 바닥 자리와 한 칸 위까지)
+    const [ftx, fty] = isoInv(sx0, sy0); // 누른 바닥 칸 (그림 없는 조경은 바닥 자리와 한 칸 위까지)
     const onFoot = b => !b.spriteHit && b.decor && ftx >= b.x - 0.2 && ftx <= b.x + b.w + 1 && fty >= b.y - 0.2 && fty <= b.y + b.d + 1;
     const under = World.buildings.filter(b => b.id !== bubble.id && (onFoot(b) || (typeof spriteOpaqueAt === 'function' && spriteOpaqueAt(b, sx0, sy0)))).sort((a, b) => (b.x + b.w + b.y + b.d) - (a.x + a.w + a.y + a.d))[0];
     if (under) return { building: under };
@@ -317,12 +327,12 @@ function pickAt(clientX, clientY) {
   // 칠해진 곳이 하나도 없으면(그림 사이 빈 곳) 예전처럼 육각형 안의 앞 건물
   const plain = byDepth.find(b => !b.spriteHit && inHex(b, 0)) || byDepth.find(b => inHex(b, 0)) || byDepth.find(b => !b.spriteHit);
   if (plain) return { building: plain };
-  const tx = Math.floor((sx / (TW / 2) + sy / (TH / 2)) / 2), ty = Math.floor((sy / (TH / 2) - sx / (TW / 2)) / 2);
+  const [tx, ty] = isoInv(sx, sy).map(Math.floor);
   // 아직 안 산 본당 땅: 누르면 땅 사기
   if (World.overview && World.map === MAPS.solmoe && !tileRegion(tx, ty) && tx >= 0 && ty >= 0 && !lotOwnedAt(tx, ty)) return { lot: lotAt(tx, ty) };
   if (World.overview && World.map.obstacleAt) {
     // 집은 지붕까지, 나무·돌은 바로 위 칸까지 누를 수 있게
-    const ob = World.map.obstacleAt(tx, ty) || World.map.obstacleAt(tx + 1, ty + 1);
+    const ob = World.map.obstacleAt(tx, ty) || (typeof W3 !== 'undefined' && W3.persp ? World.map.obstacleAt(tx, ty + 1) : World.map.obstacleAt(tx + 1, ty + 1)); // 원근 화면은 키 큰 것이 뒤(위)로 선다
     if (ob && !regionLocked(World.map.regionAt(ob.x, ob.y))) return { obstacle: ob };
   }
   const pl = World.plots.find(q => tx >= q.x && tx < q.x + 3 && ty >= q.y && ty < q.y + 3);
@@ -380,6 +390,7 @@ function canStand(x, y) {
 
 // 화면 방향 벡터(sx, sy)를 월드 이동 벡터로
 function screenToWorldDir(sx, sy) {
+  if (typeof W3 !== 'undefined' && W3.persp) { const a = W3.view.az, dx = Math.cos(a) * sx + Math.sin(a) * sy, dy = -Math.sin(a) * sx + Math.cos(a) * sy, L = Math.hypot(dx, dy); return L ? [dx / L, dy / L] : [0, 0]; }
   const dx = (sx / (TW / 2) + sy / (TH / 2)) / 2;
   const dy = (sy / (TH / 2) - sx / (TW / 2)) / 2;
   const len = Math.hypot(dx, dy);
@@ -632,7 +643,7 @@ function worldResize() {
   World.insideRes = typeof insideView === 'function' && insideView();
   // v1.08 사용자 "여전히 버퍼링이 좀 있어": 폰은 화면 배율이 3이라 캔버스 픽셀이 너무 많다 → 2배까지만 (눈으로는 거의 차이 없음)
   const dpr = Math.min(2, window.devicePixelRatio || 1);
-  World.scale = World.insideRes ? 1 / dpr : World.overview ? ZOOMS[World.zoomIdx] : (w < 520 ? 2 : 3);
+  World.scale = World.insideRes ? 1 / dpr : World.overview ? (typeof W3 !== 'undefined' && W3.wants() ? (w < 520 ? 2 : 2.4) : ZOOMS[World.zoomIdx]) : (w < 520 ? 2 : 3);
   // 바깥도 화면 픽셀 그대로 그리고(고운 그림이 뭉개지지 않게), 월드 1픽셀 = 캔버스 res픽셀로 키워 그린다
   World.res = World.insideRes ? 1 : World.scale * dpr;
   c.width = Math.ceil(w / World.scale * World.res);
@@ -868,32 +879,53 @@ function drawGroundChunks(ctx, m, gtex, dtex, camX, camY, res) {
   }
 }
 
+// v1.09 입체 화면: 바닥 마름모의 세로 비율(TH)을 바꾼다. 보던 자리는 그대로 두고, 바닥 조각 그림은 새로 그린다
+function setIsoH(h) {
+  if (Math.abs(TH - h) < 1e-6) return;
+  const [cx, cy] = World.cam, a = cx / (TW / 2), b = cy / (TH / 2);
+  TH = h;
+  World.cam = iso((a + b) / 2, (b - a) / 2);
+  GROUND_CHUNKS.clear(); World.groundLow = null; World.groundLowSig = null;
+  if (World.overview && World.map) clampCam();
+}
+
 function worldDraw() {
   const ctx = World.ctx, c = World.canvas, m = World.map, p = World.player;
   const inside = typeof insideView === 'function' && insideView();
   if (inside !== !!World.insideRes) worldResize();
-  if (inside) { ctx.setTransform(1, 0, 0, 1, 0, 0); drawInterior(ctx, c); return; }
+  if (inside) {
+    // v1.10 입체 성전 안: 아래 입체 캔버스가 방·가구를 그리고, 이 캔버스는 이름표·층 단추·누르기만
+    const in3 = typeof W3 !== 'undefined' && W3.active();
+    if (typeof W3 !== 'undefined') W3.show(in3);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (in3 && W3.frameInside()) { ctx.clearRect(0, 0, c.width, c.height); drawInterior(ctx, c); W3.end(); return; }
+    drawInterior(ctx, c); return;
+  }
   const res = World.res || 1;
+  // v1.09 입체 화면 (?3d=1): 땅·건물·나무는 아래 입체 캔버스(js/world3d.js)가 그리고, 이 캔버스는 말풍선·표시만 투명하게 덧그린다
+  const w3 = typeof W3 !== 'undefined' && W3.active();
+  if (typeof W3 !== 'undefined') { W3.show(w3); setIsoH(w3 ? W3.TH : 12.2); }
   ctx.setTransform(res, 0, 0, res, 0, 0);
-  ctx.fillStyle = '#5d8a48';
-  ctx.fillRect(0, 0, World.vw, World.vh);
+  if (w3) ctx.clearRect(0, 0, World.vw, World.vh);
+  else { ctx.fillStyle = '#5d8a48'; ctx.fillRect(0, 0, World.vw, World.vh); }
   const [cx, cy] = World.overview ? World.cam : iso(p.x, p.y);
   ctx.save();
-  const camX = Math.round((World.vw / 2 - cx) * res) / res, camY = Math.round((World.vh / 2 - cy + (World.overview ? 30 : 10)) * res) / res; // 멀리서 보기: 위쪽 막대만큼 아래로
-  World.camOff = [camX, camY];
-  ctx.translate(camX, camY);
+  const camX = w3 ? 0 : Math.round((World.vw / 2 - cx) * res) / res, camY = w3 ? 0 : Math.round((World.vh / 2 - cy + (World.overview ? 30 : 10)) * res) / res; // 멀리서 보기: 위쪽 막대만큼 아래로
+  World.camOff = w3 ? [0, 0] : [camX, camY];
+  if (w3) W3.frame(camX, camY);
+  else ctx.translate(camX, camY);
   World.hits = [];
 
   // 통짜 바닥 그림(assets/sprites/map-ground.png)이 있으면 지도 마름모에 맞춰 한 번에 깔고, 길·안개만 칸으로 덧그린다
   // 바닥 (v0.81): 이어 붙이는 잔디·흙 무늬를 쿼터뷰 바닥에 비스듬히 깐다 (한 칸 = 무늬 128픽셀, 가까이 봐도 또렷)
   const gtex = World.overview && m === MAPS.solmoe && getSprite('ground-grass'), dtex = gtex && getSprite('ground-dirt');
   // 바닥 무늬는 칸 하나에 128픽셀이라 4배 넘게 키워 그려도 더 고와지지 않는다 → 4배까지만 그려 늘여 붙인다 (v1.08 폰에서 크게 확대하면 조각이 4배로 늘어 버벅이던 것)
-  if (gtex) drawGroundChunks(ctx, m, gtex, dtex, camX, camY, Math.min(res, 4));
+  if (gtex && !w3) drawGroundChunks(ctx, m, gtex, dtex, camX, camY, Math.min(res, 4));
   for (let x = 0; x < m.w; x++) for (let y = 0; y < m.h; y++) {
     const k = x + ',' + y;
     const built = World.overview && Game.state.pastor && Game.state.pastor.paths && Game.state.pastor.paths[k];
     const kind = World.lockedTiles.has(k) ? 'fog' : World.pathSet.has(k) || built ? 'path' : 'grass';
-    if (gtex) continue; // v1.08 사용자 "윗말도 바닥을 채워줘": 잠긴 마을도 흙·풀 무늬를 깔고, 아래에서 어둡게 덮고 둘레를 긋는다
+    if (gtex || w3) continue; // v1.08 사용자 "윗말도 바닥을 채워줘": 잠긴 마을도 흙·풀 무늬를 깔고, 아래에서 어둡게 덮고 둘레를 긋는다
     drawTile(ctx, x, y, kind);
   }
   for (const pl of World.plots) drawPlot(ctx, pl, World.target && World.target.plot === pl);
@@ -902,7 +934,7 @@ function worldDraw() {
   if (World.overview && m === MAPS.solmoe && Game.state.pastor) for (const l of LOTS) {
     if (l.village || lotOwnedAt(l.x, l.y)) continue; // 마을 땅은 안개 위에 따로 적는다
     const block = lotBlocker(l.id), sq = [iso(l.x, l.y), iso(l.x + l.w, l.y), iso(l.x + l.w, l.y + l.h), iso(l.x, l.y + l.h)];
-    poly(ctx, sq, 'rgba(46,38,24,.24)');
+    if (!w3) poly(ctx, sq, 'rgba(46,38,24,.24)'); // 입체 화면에서는 바닥에 구워 둔다
     // v1.08 사용자 "구매 가능한 땅의 범위가 어디인지 표시해줘": 살 수 있는 땅은 금빛 점선, 아직 못 사는 땅은 흰 점선으로 둘레를 긋는다
     ctx.save(); ctx.setLineDash([5, 3]); ctx.lineDashOffset = -(World.frameT || 0) * 6; ctx.lineWidth = Math.max(1.2, 2 / World.scale);
     ctx.strokeStyle = block && block.startsWith('성당') ? 'rgba(255,255,255,.55)' : 'rgba(255,214,90,.95)';
@@ -915,7 +947,7 @@ function worldDraw() {
     const vl = LOTS.find(l => l.id === r.id), vb = vl && lotBlocker(vl.id);
     if (gtex) { // 무늬를 깐 잠긴 마을: 안 산 땅처럼 어둡게 덮고 점선 둘레
       const sq = [iso(r.x, r.y), iso(r.x + r.w, r.y), iso(r.x + r.w, r.y + r.h), iso(r.x, r.y + r.h)];
-      poly(ctx, sq, 'rgba(46,38,24,.3)');
+      if (!w3) poly(ctx, sq, 'rgba(46,38,24,.3)');
       ctx.save(); ctx.setLineDash([5, 3]); ctx.lineDashOffset = -(World.frameT || 0) * 6; ctx.lineWidth = Math.max(1.2, 2 / World.scale);
       ctx.strokeStyle = vl && !(vb && vb.startsWith('성당')) ? 'rgba(255,214,90,.95)' : 'rgba(255,255,255,.55)';
       ctx.beginPath(); ctx.moveTo(...sq[0]); for (const q of sq.slice(1)) ctx.lineTo(...q); ctx.closePath(); ctx.stroke(); ctx.restore();
@@ -923,7 +955,7 @@ function worldDraw() {
     drawFogLabel(ctx, r.x + r.w / 2, r.y + r.h / 2, vl ? `🏞️ ${vl.name} · ${vb && vb.startsWith('성당') ? '🔒 ' + vb : '💰' + lotCost(vl) + ' · 눌러서 땅 사기'}` : `🔒 ${v ? v.name : ''} · 이장님께 문의`);
   }
   // 지도 가장자리 테두리
-  ctx.strokeStyle = 'rgba(0,0,0,.15)';
+  ctx.strokeStyle = w3 ? 'rgba(0,0,0,0)' : 'rgba(0,0,0,.15)';
   ctx.beginPath();
   ctx.moveTo(...iso(0, m.h)); ctx.lineTo(...iso(m.w, m.h)); ctx.lineTo(...iso(m.w, 0));
   ctx.stroke();
@@ -938,8 +970,10 @@ function worldDraw() {
 
   const objs = [];
   for (const b of World.buildings) if (!World.placing || World.placing.move !== b.id) objs.push({ box: [b.x, b.y, b.x + b.w, b.y + b.d], draw: () => {
-    if (World.overview && !b.decor) drawGroundShadow(ctx, b);
-    drawBuildingAny(ctx, b);
+    if (!(w3 && W3.covers(b))) {
+      if (World.overview && !b.decor) drawGroundShadow(ctx, b);
+      drawBuildingAny(ctx, b);
+    }
     if (b.rooms && !b.scaffold && !World.overview) drawBadge(ctx, b, b.rooms.map(g => g ? (g.level ? UNITS[g.type].icon : '🔨') : '·').join(' '));
     else if (b.level && !b.scaffold && !World.overview) drawBadge(ctx, b, `Lv${b.level}`);
     if (b.working) drawProgress(ctx, b, jobProgress(b.job));
@@ -984,7 +1018,7 @@ function worldDraw() {
     const ox1 = iso(o.x, o.y + o.d)[0], ox2 = iso(o.x + o.w, o.y)[0], oy1 = iso(o.x, o.y)[1], oy2 = iso(o.x + o.w, o.y + o.d)[1];
     if (ox2 < offX || ox1 > offX2 || oy2 < offY || oy1 > offY2) continue;
     objs.push({ box: [o.x + 0.1, o.y + 0.1, o.x + o.w - 0.1, o.y + o.d - 0.1], draw: () => {
-      drawObstacle(ctx, o, World.frameT);
+      if (!(w3 && W3.coversOb(o))) drawObstacle(ctx, o, World.frameT);
       const j = jobFor(o.id);
       if (j) drawProgress(ctx, { x: o.x, y: o.y, w: o.w, d: o.d, h: o.type === 'house' ? 13 : 4, style: 'house' }, jobProgress(j));
     } });
@@ -1033,13 +1067,13 @@ function worldDraw() {
       } });
     });
   }
-  if (World.overview && m === MAPS.solmoe && Game.state.pastor && Game.state.pastor.fence) {
+  if (World.overview && m === MAPS.solmoe && Game.state.pastor && Game.state.pastor.fence && !(w3 && W3.fence)) {
     const lv = Game.state.pastor.fence;
     for (const e of fenceEdges()) objs.push({ box: e.ax === e.bx ? [e.ax - 0.02, e.ay, e.ax + 0.02, e.by] : [e.ax, e.ay - 0.02, e.bx, e.ay + 0.02], draw: () => drawFenceEdge(ctx, lv, e) });
   }
   { const TS = m.treeSize || 1, G = m.grid || 1;
-    if (!(World.overview && m.obstacles)) m.trees.forEach(([x, y], i) => objs.push({ box: [x + 0.2 * TS, y + 0.2 * TS, x + 0.8 * TS, y + 0.8 * TS], draw: () => drawTree(ctx, x, y, i % 3 === 2 ? 1 : 0, TS) }));
-    for (const [x, y] of m.statues || []) objs.push({ box: [x + 0.2 * G, y + 0.2 * G, x + 0.8 * G, y + 0.8 * G], draw: () => drawStatue(ctx, x, y, G) }); }
+    if (!(World.overview && m.obstacles) && !w3) m.trees.forEach(([x, y], i) => objs.push({ box: [x + 0.2 * TS, y + 0.2 * TS, x + 0.8 * TS, y + 0.8 * TS], draw: () => drawTree(ctx, x, y, i % 3 === 2 ? 1 : 0, TS) }));
+    if (!(w3 && W3.fence)) for (const [x, y] of m.statues || []) objs.push({ box: [x + 0.2 * G, y + 0.2 * G, x + 0.8 * G, y + 0.8 * G], draw: () => drawStatue(ctx, x, y, G) }); }
   const frame = Math.floor(World.frameT * 6);
   for (const n of World.npcs) if (npcVisible(n)) objs.push({ box: [n.x - 0.2, n.y - 0.2, n.x + 0.2, n.y + 0.2], draw: () => {
     const [sx, sy] = iso(n.x, n.y);
@@ -1093,6 +1127,7 @@ function worldDraw() {
     ctx.globalAlpha = 1;
   }
   ctx.restore();
+  if (w3) W3.end(); // 입체: 이 장면에 그린 사람들을 세우고 입체 장면을 그린다
 }
 
 // 건물 위 말풍선: 쌓인 봉헌·새 얼굴 (주임 신부 단계)
@@ -1155,6 +1190,7 @@ function worldLoop(ts) {
 }
 
 function worldInit(onInteract) {
+  World.onInteract = onInteract;
   World.canvas = document.getElementById('world');
   World.ctx = World.canvas.getContext('2d');
   worldResize();
@@ -1202,6 +1238,7 @@ function worldInit(onInteract) {
   World.canvas.addEventListener('pointerdown', e => {
     if (World.isPaused() || !document.body.classList.contains('in-world')) return;
     if (!World.overview) {
+      if (typeof W3 !== 'undefined' && W3.persp) return; // 입체 화면은 js/world3d.js가 끌기·누르기를 맡는다
       // 캐릭터 모드: 말풍선만 누를 수 있다
       const hit = pickAt(e.clientX, e.clientY);
       if (hit && hit.bubble && World.onCollect) { e.preventDefault(); World.onCollect(hit.bubble); }
@@ -1267,13 +1304,17 @@ function worldInit(onInteract) {
       if ((nx !== World.placing.x || ny !== World.placing.y) && World.onPlaceMove) World.onPlaceMove(nx, ny);
       return;
     }
+    if (drag.moved > drag.tap && typeof insideView === 'function' && insideView() && typeof W3 !== 'undefined' && W3.persp) { W3.drag(drag, e.clientX, e.clientY); return; }
     if (drag.moved > drag.tap && typeof insideView === 'function' && insideView()) { World.inPan = [drag.pan[0] + dx / World.scale, drag.pan[1] + dy / World.scale]; return; }
+    // v1.10 입체 원근 화면: 끌면 신부님이 걷는다(조이스틱). 짓기·길 놓기 중에는 예전처럼 화면을 옮긴다
+    if (drag.moved > drag.tap && typeof W3 !== 'undefined' && W3.persp) { if (World.placing || World.pathMode || W3.free) W3.drag(drag, e.clientX, e.clientY); else { drag.walk = true; W3.stick(drag, e.clientX, e.clientY); } return; }
     if (drag.moved > drag.tap) { World.cam = [drag.cam[0] - dx / World.scale, drag.cam[1] - dy / World.scale]; clampCam(); }
   });
   const endPtr = e => {
     if (!World.overview || !ptrs.has(e.pointerId)) return;
     ptrs.delete(e.pointerId);
     if (drag && drag.lp) clearTimeout(drag.lp);
+    if (drag && drag.walk && typeof W3 !== 'undefined') W3.stickEnd();
     if (drag && drag.pathGrab) { const g = drag.pathGrab; World.pathDrag = null; drag = null; if (e.type === 'pointerup' && World.onPathMove) World.onPathMove(g.from, g.at); return; }
     if (drag && drag.longPressed) { drag = null; return; }
     if (drag && drag.moved <= drag.tap && e.type === 'pointerup' && !World.isPaused()) {
@@ -1289,8 +1330,11 @@ function worldInit(onInteract) {
           World.onPlaceMove(Math.round(tx - w / 2), Math.round(ty - d / 2));
         }
       } else {
+        if (typeof W3 !== 'undefined' && W3.persp && (W3.tapEgg(e.clientX, e.clientY) || W3.tapFolk(e.clientX, e.clientY))) { drag = null; return; } // 부활 달걀 · 교우
         const hit = pickAt(e.clientX, e.clientY);
         World.tagFor = hit && hit.building && hit.building.menu ? { b: hit.building, until: performance.now() + 5000 } : null;
+        // 원근 화면: 빈 땅을 누르면 신부님이 그곳으로 걷고, 건물을 누르면 문 앞으로 걸어가며 바로 연다
+        if (typeof W3 !== 'undefined' && W3.persp) { if (!hit) W3.walkToScreen(e.clientX, e.clientY); else if (hit.building && hit.building.doorPt) W3.walkTo(hit.building.doorPt[0], hit.building.doorPt[1], 1.0); else if (hit.obstacle) W3.walkTo(hit.obstacle.x + hit.obstacle.w / 2, hit.obstacle.y + hit.obstacle.d / 2, 1.3); else if (hit.npc) W3.walkTo(hit.npc.x, hit.npc.y, 1.0); }
         if (World.onTap) World.onTap(hit);
       }
     }

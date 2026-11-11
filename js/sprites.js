@@ -2,9 +2,11 @@
 // 좌표: 월드 타일 (x, y) → 쿼터뷰 화면 픽셀
 
 // v0.82: 바닥 마름모 기울기를 2:1(0.5)에서 0.42로. 받은 3D 건물 그림들이 대부분 이 각도라 바닥과 건물이 맞는다
-const TW = 32, TH = 12.2; // v0.84: 받은 3D 건물 그림 바닥 기울기 평균(0.38)에 맞춤
+const TW = 32; let TH = 12.2; // v1.09: 입체 화면(?3d=1)에서는 미리 보기 각도(45도쯤)로 바뀐다 (setIsoH). v0.84: 받은 3D 건물 그림 바닥 기울기 평균(0.38)에 맞춤
 
 function iso(x, y) { return [(x - y) * TW / 2, (x + y) * TH / 2]; }
+// iso의 거꾸로: 화면(월드 픽셀) → 바닥 칸. v1.10 입체 원근 화면에서는 js/world3d.js가 카메라 광선으로 바꿔 끼운다
+function isoInv(sx, sy) { return [(sx / (TW / 2) + sy / (TH / 2)) / 2, (sy / (TH / 2) - sx / (TW / 2)) / 2]; }
 function up(p, v) { return [p[0], p[1] - v]; }
 function lerp(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]; }
 
@@ -772,7 +774,32 @@ function drawWorker(ctx, x, y, dir, t, working, look = 'worker') {
 
 // 쌓인 것 아이콘: 건물 위 동그란 💰/👥 아이콘과 숫자. k = 확대가 작아도 화면에서 같은 크기로 보이게 하는 배율
 // 그린 자리(월드 픽셀)를 돌려준다
+// v1.10 입체 원근 화면: 미리 보기의 핀 말풍선 (크림색 물방울, 끝이 아래로, 밤색 테두리)
+const PV3 = () => typeof W3 !== 'undefined' && W3.persp;
+function pvPin(ctx, cx, cy, r, k, fill, stroke) {
+  const tip = cy + r * 1.45;
+  ctx.beginPath(); ctx.arc(cx, cy, r, Math.PI * 0.75, Math.PI * 2.25); ctx.lineTo(cx, tip); ctx.closePath();
+  ctx.fillStyle = 'rgba(60,30,10,.25)'; ctx.save(); ctx.translate(0, 3 * k); ctx.fill(); ctx.restore();
+  ctx.fillStyle = fill; ctx.fill(); ctx.lineWidth = 1.8 * k; ctx.strokeStyle = stroke; ctx.lineJoin = 'round'; ctx.stroke();
+}
+function pvTag(ctx, cx, y, label, k, bg = 'rgba(59,42,31,.88)') {
+  ctx.font = `bold ${Math.round(7.5 * k)}px sans-serif`; ctx.textAlign = 'center';
+  const w = Math.ceil(ctx.measureText(label).width) + 9 * k, h = 11.5 * k;
+  ctx.fillStyle = bg; ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(cx - w / 2, y, w, h, h / 2); else ctx.rect(cx - w / 2, y, w, h); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.fillText(label, cx, y + h - 3 * k);
+  return w;
+}
 function drawStashBubble(ctx, b, st, full, t, k = 1) {
+  if (PV3()) {
+    const [sx0, sy0] = buildingTop(b), bob = Math.sin(t * 3 + b.x) * 3 * k;
+    const r = 10.5 * k, cx = Math.round(sx0), cy = Math.round(sy0 - 18 * k - r + bob);
+    const icon = st.offering >= 1 ? '💰' : '👥', count = st.offering >= 1 ? Math.floor(st.offering) : Math.floor(st.members);
+    pvPin(ctx, cx, cy, r, k, full && Math.floor(t * 3) % 2 === 0 ? '#ffe08a' : '#fbf4e2', '#7c3527');
+    ctx.textAlign = 'center'; ctx.font = `${Math.round(11 * k)}px sans-serif`; ctx.fillText(icon, cx, cy + 4 * k);
+    const label = String(count) + (st.offering >= 1 && st.members >= 1 ? ` +${Math.floor(st.members)}👥` : '');
+    const w = pvTag(ctx, cx, cy + r * 1.45 + 3 * k, label, k, 'rgba(79,143,69,.95)');
+    return { x: cx - Math.max(r, w / 2) - 2 * k, y: cy - r - 2 * k, w: Math.max(2 * r, w) + 4 * k, h: r * 2.45 + 20 * k };
+  }
   const [sx0, sy0] = buildingTop(b);
   const bob = Math.sin(t * 3 + b.x) * 1.5;
   const icon = st.offering >= 1 ? '💰' : '👥';
@@ -801,6 +828,14 @@ function drawStashBubble(ctx, b, st, full, t, k = 1) {
 
 // 미사 시간 알림: 성당 위에 흔들리는 종 + '주일미사' 띠 (v0.75)
 function drawMassBubble(ctx, b, mc, t, k = 1, dx = 0) {
+  if (PV3()) {
+    const [sx1, sy0] = buildingTop(b), sx0 = sx1 + dx, bob = Math.sin(t * 3) * 3 * k, swing = Math.sin(t * 6) * 0.25;
+    const r = 11 * k, cx = Math.round(sx0), cy = Math.round(sy0 - 20 * k - r + bob);
+    pvPin(ctx, cx, cy, r, k, mc.ready ? '#ffe08a' : '#fbf4e2', '#7c3527');
+    ctx.save(); ctx.translate(cx, cy - 2 * k); ctx.rotate(swing); ctx.textAlign = 'center'; ctx.font = `${Math.round(12 * k)}px sans-serif`; ctx.fillText((mc.text === '회의' || mc.text === '초대') ? mc.icon : '🔔', 0, 5 * k); ctx.restore();
+    const w = pvTag(ctx, cx, cy + r * 1.45 + 3 * k, `${mc.icon} ${mc.text}`, k, 'rgba(124,53,39,.95)');
+    return { x: cx - Math.max(r, w / 2) - 2 * k, y: cy - r - 2 * k, w: Math.max(2 * r, w) + 4 * k, h: r * 2.45 + 20 * k };
+  }
   const [sx1, sy0] = buildingTop(b), sx0 = sx1 + dx;
   const bob = Math.sin(t * 3) * 1.5, swing = Math.sin(t * 6) * 0.25;
   const r = 14 * k, cx = Math.round(sx0), cy = Math.round(sy0 - 16 * k - r + bob * k);
@@ -969,9 +1004,9 @@ function drawNameTag(ctx, b, text, k = 1, sub = '') {
 function drawUpBadge(ctx, b, t, k = 1, waiting = false) {
   const [sx0, sy0] = buildingTop(b);
   const r = 9 * k, cx = Math.round(sx0 + 22 * k), cy = Math.round(sy0 - 6 * k + (waiting ? 0 : Math.sin(t * 4 + b.y) * 1.5 * k));
-  ctx.fillStyle = waiting ? '#5f5e5a' : '#1f6b3a';
-  ctx.beginPath(); ctx.arc(cx, cy, r + 1.2 * k, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = waiting ? '#b4b2a9' : '#3cbf68';
+  ctx.fillStyle = PV3() ? '#3b2a1f' : waiting ? '#5f5e5a' : '#1f6b3a';
+  ctx.beginPath(); ctx.arc(cx, cy, r + (PV3() ? 2 : 1.2) * k, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = PV3() ? (waiting ? '#d8cdb4' : '#e7ab2c') : waiting ? '#b4b2a9' : '#3cbf68';
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
   // 위 화살표
   ctx.fillStyle = '#fff';

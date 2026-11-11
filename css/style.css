@@ -1091,3 +1091,5 @@ body:has(#app .vn) #app { max-width: none; padding: 0; }
   background: #2b6b3f; color: #fff; border: 2px solid #f2d27a; border-radius: 999px; padding: 10px 18px; font: inherit; font-size: 14px; box-shadow: 0 6px 18px rgba(0,0,0,.3); cursor: pointer; animation: upd-pop .4s ease-out; }
 #update-bar b { color: #ffe9a8; }
 @keyframes upd-pop { from { transform: translate(-50%, -12px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+/* v1.10 교구 지도 */
+.diocese-map { display: block; width: 100%; height: auto; border: 2px solid #3b2a1f; border-radius: 16px; margin: 4px 0 10px; }

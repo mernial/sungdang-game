@@ -15,7 +15,8 @@
   <meta name="theme-color" content="#2b2018">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=252">
+  <link rel="stylesheet" href="css/style.css?v=290">
+  <link rel="stylesheet" href="css/w3.css?v=6">
 </head>
 <body>
   <!-- 쿼터뷰 월드 (신학교·본당) -->
@@ -32,14 +33,16 @@
   <div id="toast"></div>
   <div id="term-pop" hidden></div>
 
-  <script src="js/data.js?v=252"></script>
-  <script src="js/engine.js?v=252"></script>
-  <script src="js/parish.js?v=252"></script>
-  <script src="js/sprites.js?v=252"></script>
-  <script src="js/maps.js?v=252"></script>
-  <script src="js/world.js?v=252"></script>
-  <script src="js/interior.js?v=252"></script>
-  <script src="js/sound.js?v=252"></script>
-  <script src="js/ui.js?v=252"></script>
+  <script src="js/data.js?v=270"></script>
+  <script src="js/engine.js?v=270"></script>
+  <script src="js/parish.js?v=270"></script>
+  <script src="js/sprites.js?v=277"></script>
+  <script src="js/maps.js?v=270"></script>
+  <script src="js/world.js?v=287"></script>
+  <!-- v1.09 입체 화면 시험판: 주소 끝에 ?3d=1 (기기에 기억, ?3d=0이면 끈다). 켠 사람만 three.js를 받는다 -->
+  <script>(function () { var q = location.search, on = false; try { if (/[?&]3d=0/.test(q)) localStorage.removeItem('sungdang-3d'); else if (/[?&]3d=1/.test(q)) localStorage.setItem('sungdang-3d', '1'); on = localStorage.getItem('sungdang-3d') === '1'; } catch (e) { on = /[?&]3d=1/.test(q); } if (on) document.write('<script src="js/vendor/three.min.js?v=160"><\/script><script src="js/world3d.js?v=291"><\/script>'); })();</script>
+  <script src="js/interior.js?v=282"></script>
+  <script src="js/sound.js?v=270"></script>
+  <script src="js/ui.js?v=290"></script>
 </body>
 </html>

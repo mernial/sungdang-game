@@ -3446,7 +3446,20 @@ function reportCardHtml(card) {
 
 function careerHtml() {
   const c = Game.state.pastor.career || [];
-  return c.length ? `<h3>📜 지난 본당</h3>${c.map(x => `<div class="q-item">${x.icon} ${x.name} · ${x.weeks}주일 · 신자 ${x.members}명 · <b>${x.grade}</b> (${x.score}점)</div>`).join('')}` : '';
+  return c.length ? `<h3>📜 지난 본당</h3>${dioceseMapSvg()}${c.map(x => `<div class="q-item">${x.icon} ${x.name} · ${x.weeks}주일 · 신자 ${x.members}명 · <b>${x.grade}</b> (${x.score}점)</div>`).join('')}` : '';
+}
+// v1.10 교구 지도 (미리 보기): 거쳐 간 본당과 지금 본당을 길로 잇는다. 발령받을 때마다 더 큰 동네로
+function dioceseMapSvg() {
+  const p = Game.state.pastor, c = p.career || [], cur = PARISHES[p.parishId] || {};
+  const stops = [...c.map(x => ({ icon: x.icon, name: x.name, sub: `${x.grade} · 신자 ${x.members}`, past: true })), { icon: cur.icon || '⛪', name: cur.name || '지금 본당', sub: '지금 사목 중', past: false }].slice(-5);
+  const n = stops.length, X = i => 40 + i * (260 / Math.max(1, n - 1)), Y = i => 120 - i * (60 / Math.max(1, n - 1)) + (i % 2 ? 18 : 0);
+  const path = stops.map((_, i) => `${i ? 'L' : 'M'}${X(i).toFixed(0)} ${Y(i).toFixed(0)}`).join(' ');
+  return `<svg class="diocese-map" viewBox="0 0 340 180" role="img" aria-label="교구 지도: 거쳐 간 본당과 지금 본당">
+    <rect x="0" y="0" width="340" height="180" rx="14" fill="#cfe6a8"/><path d="M0 140 Q60 100 110 130 T230 110 T340 80 V180 H0Z" fill="#b9d98e"/>
+    <path d="M14 40 l20 -28 20 28z M44 46 l16 -22 16 22z M292 34 l18 -24 18 24z" fill="#7fae6a"/>
+    <path d="${path}" fill="none" stroke="#e9cf96" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    ${stops.map((st, i) => `<g><circle cx="${X(i).toFixed(0)}" cy="${Y(i).toFixed(0)}" r="${st.past ? 13 : 16}" fill="${st.past ? '#fbf4e2' : '#ffe08a'}" stroke="${st.past ? '#4f8f45' : '#7c3527'}" stroke-width="3"/><text x="${X(i).toFixed(0)}" y="${(Y(i) + 5).toFixed(0)}" font-size="13" text-anchor="middle">${st.icon}</text><text x="${X(i).toFixed(0)}" y="${(Y(i) + 30).toFixed(0)}" font-size="10.5" font-weight="700" text-anchor="middle" fill="#3b2a1f">${st.name.replace(/ 본당$/, '')}</text><text x="${X(i).toFixed(0)}" y="${(Y(i) + 43).toFixed(0)}" font-size="9.5" text-anchor="middle" fill="${st.past ? '#4f8f45' : '#7c3527'}">${st.sub}</text></g>`).join('')}
+  </svg>`;
 }
 
 function parishCardSub(id) {
